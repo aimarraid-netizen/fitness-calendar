@@ -1,0 +1,31 @@
+# Virtual environment
+venv/
+
+# Environment variables
+.env
+
+# Data and logs
+data/
+logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Charts
+*.png
+
+# Claude project files (tundlik info)
+claude_project/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# GitLab Pages: calendar.html JA .gitlab-ci.yml ei ole ignoreeritud!
+# Need lähevad repo'sse

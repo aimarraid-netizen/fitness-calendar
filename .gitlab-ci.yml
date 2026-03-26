@@ -1,0 +1,13 @@
+# GitLab Pages Configuration
+# Avaldab calendar.html kui static website
+
+pages:
+  stage: deploy
+  script:
+    - mkdir -p public
+    - cp calendar.html public/index.html
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
