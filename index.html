@@ -574,7 +574,7 @@
 </head>
 <body>
     <div class="container">
-        <div class="timestamp">Genereeritud: 30.03.2026 08:16</div>
+        <div class="timestamp">Genereeritud: 30.03.2026 08:21</div>
         <h1>🏋️ Treeningute Kalender</h1>
 
         <div class="month-nav">
@@ -704,7 +704,22 @@
                         return w.workout_type;
                     }))];
 
+                    // Värvi kaart
+                    const colorMap = {
+                        'gym-jalad': '#f44336',   // Punane
+                        'gym-rind': '#4CAF50',    // Roheline
+                        'gym-selg': '#FFC107',    // Kollane
+                        'walking': '#2196F3',     // Sinine
+                        'running': '#FF9800',     // Oranž
+                        'cycling': '#FF5722',     // Punane-oranž
+                        'hiking': '#795548',      // Pruun
+                        'swimming': '#00BCD4'     // Tsüaan
+                    };
+
                     if (types.length > 1) {
+                        // Dünaamiline gradient tegelike värvidega
+                        const colors = types.map(t => colorMap[t] || '#666').slice(0, 2);
+                        dayEl.style.background = `linear-gradient(135deg, ${colors[0]} 50%, ${colors[1]} 50%)`;
                         dayEl.className += ' multi';
                     } else {
                         dayEl.className += ` ${types[0]}`;
