@@ -193,18 +193,18 @@
 
         .stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-top: 30px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 20px;
         }
         .stat-card {
             background: #2a2a2a;
-            padding: 15px;
+            padding: 10px 5px;
             border-radius: 10px;
             text-align: center;
         }
-        .stat-value { font-size: 28px; font-weight: bold; color: #4CAF50; margin: 10px 0; }
-        .stat-label { color: #999; font-size: 14px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #4CAF50; margin: 5px 0; }
+        .stat-label { color: #999; font-size: 12px; }
 
         .progress-section {
             margin-top: 30px;
@@ -451,23 +451,23 @@
                 font-size: 11px;
             }
 
-            /* Stats grid */
+            /* Stats grid - alati 4 veergu */
             .stats {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 10px;
-                margin-top: 20px;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 6px;
+                margin-top: 15px;
             }
 
             .stat-card {
-                padding: 12px;
+                padding: 8px 4px;
             }
 
             .stat-value {
-                font-size: 24px;
+                font-size: 20px;
             }
 
             .stat-label {
-                font-size: 12px;
+                font-size: 10px;
             }
 
             /* Progress section */
@@ -584,8 +584,7 @@
 </head>
 <body>
     <div class="container">
-        <div class="timestamp">Genereeritud: 12.04.2026 12:31</div>
-        <h1>🏋️ Treeningute Kalender</h1>
+        <div class="timestamp">Genereeritud: 12.04.2026 12:35</div>
 
         <div class="month-nav">
             <button onclick="prevMonth()">← Eelmine</button>
@@ -947,13 +946,19 @@
         }
 
         function updateStats() {
-            const allWorkouts = Object.values(workouts).flat();
-            document.getElementById('gymCount').textContent = allWorkouts.filter(w => w.source === 'gymaholic').length;
-            document.getElementById('walkCount').textContent = allWorkouts.filter(w => w.workout_type === 'walking').length;
-            document.getElementById('swimCount').textContent = allWorkouts.filter(w => w.workout_type === 'swimming').length;
-            document.getElementById('cycleCount').textContent = allWorkouts.filter(w => w.workout_type === 'cycling').length;
+            // Filtreeri ainult valitud kuu treeningud
+            const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+            const monthWorkouts = Object.entries(workouts)
+                .filter(([date]) => date.startsWith(monthPrefix))
+                .flatMap(([, ws]) => ws);
 
-            // Progressi arvutamine
+            document.getElementById('gymCount').textContent = monthWorkouts.filter(w => w.source === 'gymaholic').length;
+            document.getElementById('walkCount').textContent = monthWorkouts.filter(w => w.workout_type === 'walking').length;
+            document.getElementById('swimCount').textContent = monthWorkouts.filter(w => w.workout_type === 'swimming').length;
+            document.getElementById('cycleCount').textContent = monthWorkouts.filter(w => w.workout_type === 'cycling').length;
+
+            // Progressi arvutamine (kogu ajalugu)
+            const allWorkouts = Object.values(workouts).flat();
             updateProgress(allWorkouts);
         }
 
@@ -1021,36 +1026,36 @@
         function generateRecommendations(gymWorkouts, allWorkouts) {
             const recommendations = document.getElementById('recommendations');
 
-            // Arvuta viimase 2 nädala treeningud
-            const twoWeeksAgo = new Date();
-            twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-
+            // Filtreeri valitud kuu treeningud
+            const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
             const recentGym = gymWorkouts.filter(w => {
-                const wDate = new Date(w.timestamp || w.date);
-                return wDate >= twoWeeksAgo;
+                const date = (w.timestamp || w.date || '').substring(0, 7);
+                return date === monthPrefix;
             });
 
             const recentCardio = allWorkouts.filter(w => {
-                const wDate = new Date(w.timestamp || w.date);
-                return w.source === 'workoutdoor' && wDate >= twoWeeksAgo;
+                const date = (w.timestamp || w.date || '').substring(0, 7);
+                return w.source === 'workoutdoor' && date === monthPrefix;
             });
 
             let tips = '<h4>💡 Soovitused</h4>';
 
+            const monthLabel = monthNames[currentMonth];
+
             // Treeningute sagedus
-            if (recentGym.length < 3) {
-                tips += '<p>⚠️ Viimase 2 nädala jooksul on olnud ainult ' + recentGym.length + ' jõutreeningut. Ideaalne oleks 3-4 treeningut nädalas.</p>';
-            } else if (recentGym.length >= 6) {
-                tips += '<p>🔥 Suurepärane! ' + recentGym.length + ' jõutreeningut 2 nädala jooksul. Hoia seda tempot!</p>';
+            if (recentGym.length === 0) {
+                tips += '<p>⚠️ ' + monthLabel + ' — jõutreeninguid pole veel.</p>';
+            } else if (recentGym.length < 6) {
+                tips += '<p>✅ ' + monthLabel + ' — ' + recentGym.length + ' jõutreeningut.</p>';
             } else {
-                tips += '<p>✅ Hea! ' + recentGym.length + ' jõutreeningut 2 nädala jooksul. Jätka samas vaimus!</p>';
+                tips += '<p>🔥 ' + monthLabel + ' — ' + recentGym.length + ' jõutreeningut. Tugev kuu!</p>';
             }
 
             // Kardio
             if (recentCardio.length === 0) {
-                tips += '<p>💙 Lisa vahelduseks kardiot (kõnd, rattasõit, ujumine) – aitab taastumisele ja üldisele vormile.</p>';
+                tips += '<p>💙 ' + monthLabel + ' — kardiot pole. Lisa kõnd, rattasõit või ujumine!</p>';
             } else {
-                tips += '<p>💙 ' + recentCardio.length + ' kardio treeningut viimase 2 nädala jooksul – suurepärane tasakaal!</p>';
+                tips += '<p>💙 ' + monthLabel + ' — ' + recentCardio.length + ' kardio treeningut.</p>';
             }
 
             // Topeltprogressioon meeldetuletus
