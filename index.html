@@ -94,9 +94,8 @@
         }
 
         .day-number { font-size: 20px; font-weight: bold; margin-bottom: 5px; }
-        .day-icon { font-size: 24px; }
-        .day-name { font-size: 12px; margin-top: 5px; font-weight: 600; }
-        .day-cardio-info { font-size: 10px; margin-top: 5px; line-height: 1.3; opacity: 0.95; }
+        .day-name { font-size: 13px; margin-top: 4px; font-weight: 600; line-height: 1.2; }
+        .day-cardio-info { font-size: 11px; margin-top: 2px; line-height: 1.2; opacity: 0.9; }
 
         .modal {
             display: none;
@@ -393,19 +392,15 @@
                 margin-bottom: 3px;
             }
 
-            .day-icon {
-                font-size: 20px;
-            }
-
             .day-name {
-                font-size: 9px;
-                margin-top: 3px;
-                line-height: 1.2;
+                font-size: 10px;
+                margin-top: 2px;
+                line-height: 1.1;
             }
 
             .day-cardio-info {
-                font-size: 8px;
-                margin-top: 3px;
+                font-size: 9px;
+                margin-top: 1px;
             }
 
             /* Modal kohandused */
@@ -573,23 +568,19 @@
                 font-size: 14px;
             }
 
-            .day-icon {
-                font-size: 16px;
-            }
-
             .day-name {
-                font-size: 8px;
+                font-size: 9px;
             }
 
             .stats {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(4, 1fr);
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="timestamp">Genereeritud: 12.04.2026 12:54</div>
+        <div class="timestamp">Genereeritud: 12.04.2026 12:57</div>
 
         <div class="month-nav">
             <button onclick="prevMonth()">← Eelmine</button>
@@ -742,47 +733,30 @@
 
                     dayEl.onclick = () => showDetails(dateStr, dayWorkouts);
 
-                    const benchSvg = `<svg viewBox="0 0 40 36" width="22" height="20" style="vertical-align:middle"><rect x="6" y="30" width="14" height="2.5" rx="1" fill="#ccc"/><rect x="7" y="20" width="2.5" height="12" rx="0.8" fill="#ccc"/><rect x="16" y="20" width="2.5" height="12" rx="0.8" fill="#ccc"/><rect x="5" y="19" width="16" height="3" rx="1" fill="#aaa"/><rect x="14" y="8" width="2.5" height="13" rx="0.8" fill="#ccc"/><rect x="14" y="6" width="2.5" height="3" rx="0.5" fill="#bbb"/><rect x="2" y="9" width="36" height="2" rx="0.8" fill="#ddd"/><ellipse cx="5" cy="10" rx="3" ry="5" fill="#bbb"/><ellipse cx="5" cy="10" rx="1.8" ry="4" fill="#999"/><ellipse cx="35" cy="10" rx="3" ry="5" fill="#bbb"/><ellipse cx="35" cy="10" rx="1.8" ry="4" fill="#999"/></svg>`;
-                    const icons = {
-                        'gym-jalad': '🦵',
-                        'gym-rind': benchSvg,
-                        'gym-selg': '💪',
-                        'walking': '🚶',
-                        'running': '🏃',
-                        'cycling': '🚴',
-                        'hiking': '🥾',
-                        'swimming': '🏊'
-                    };
-                    const icon = types.map(t => icons[t] || '🏃').join('');
-
-                    // Treeningu nimi (eemalda ainult number, nt "1. Jalad & kõht" -> "Jalad & kõht")
-                    let workoutLabel = '';
-                    if (dayWorkouts[0].source === 'gymaholic') {
-                        const name = dayWorkouts[0].workout_name || '';
-                        const fullName = name.replace(/^\d+\.\s*/, '').trim();
-                        workoutLabel = `<div class="day-name">${fullName}</div>`;
-                    } else {
-                        // Kardio: nimi + distants/pulss
-                        const w = dayWorkouts[0];
-                        const cardioNames = {
-                            'walking': 'Kõndimine',
-                            'running': 'Jooksmine',
-                            'cycling': 'Rattasõit',
-                            'hiking': 'Matkamine',
-                            'swimming': 'Ujumine'
-                        };
-                        const cardioName = cardioNames[w.workout_type] || w.workout_name || 'Kardio';
-                        const distanceInfo = w.distance > 0 ? `${w.distance.toFixed(1)}km` : '';
-                        const hrInfo = w.avg_hr > 0 ? `${w.avg_hr} bpm` : '';
-                        const extra = [distanceInfo, hrInfo].filter(Boolean).join(' · ');
-                        workoutLabel = `<div class="day-name">${cardioName}</div>` +
-                            (extra ? `<div class="day-cardio-info">${extra}</div>` : '');
-                    }
+                    // Treeningu nimed
+                    let labels = [];
+                    dayWorkouts.forEach(w => {
+                        if (w.source === 'gymaholic') {
+                            const name = (w.workout_name || '').replace(/^\d+\.\s*/, '').trim();
+                            labels.push(`<div class="day-name">${name}</div>`);
+                        } else {
+                            const cardioNames = {
+                                'walking': 'Kõndimine',
+                                'running': 'Jooksmine',
+                                'cycling': 'Rattasõit',
+                                'hiking': 'Matkamine',
+                                'swimming': 'Ujumine'
+                            };
+                            const cardioName = cardioNames[w.workout_type] || w.workout_name || 'Kardio';
+                            const distanceInfo = w.distance > 0 ? `${w.distance.toFixed(1)}km` : '';
+                            labels.push(`<div class="day-name">${cardioName}</div>` +
+                                (distanceInfo ? `<div class="day-cardio-info">${distanceInfo}</div>` : ''));
+                        }
+                    });
 
                     dayEl.innerHTML = `
                         <div class="day-number">${day}</div>
-                        <div class="day-icon">${icon}</div>
-                        ${workoutLabel}
+                        ${labels.join('')}
                     `;
                 } else {
                     dayEl.className += ' empty';
