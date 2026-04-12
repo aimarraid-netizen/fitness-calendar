@@ -90,7 +90,7 @@
         .day.gym-selg { background: #FFC107; }
         .day.walking { background: #2196F3; }
         .day.running { background: #FF9800; }
-        .day.cycling { background: #FF5722; }
+        .day.cycling { background: #9C27B0; }
         .day.hiking { background: #795548; }
         .day.swimming { background: #00BCD4; }
         .day.multi {
@@ -584,7 +584,7 @@
 </head>
 <body>
     <div class="container">
-        <div class="timestamp">Genereeritud: 12.04.2026 12:26</div>
+        <div class="timestamp">Genereeritud: 12.04.2026 12:31</div>
         <h1>🏋️ Treeningute Kalender</h1>
 
         <div class="month-nav">
@@ -722,7 +722,7 @@
                         'gym-selg': '#FFC107',    // Kollane
                         'walking': '#2196F3',     // Sinine
                         'running': '#FF9800',     // Oranž
-                        'cycling': '#FF5722',     // Punane-oranž
+                        'cycling': '#9C27B0',     // Lilla
                         'hiking': '#795548',      // Pruun
                         'swimming': '#00BCD4'     // Tsüaan
                     };
@@ -748,7 +748,7 @@
                         'hiking': '⛰️',
                         'swimming': '🏊'
                     };
-                    const icon = types.length > 1 ? '💪' : icons[types[0]] || '🏃';
+                    const icon = types.map(t => icons[t] || '🏃').join('');
 
                     // Treeningu nimi (eemalda ainult number, nt "1. Jalad & kõht" -> "Jalad & kõht")
                     let workoutLabel = '';
