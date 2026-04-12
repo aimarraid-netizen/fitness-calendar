@@ -232,6 +232,15 @@
             color: #ccc;
             font-size: 14px;
             margin-bottom: 5px;
+            cursor: pointer;
+        }
+        .progress-item .exercise-name:hover {
+            color: #fff;
+            text-decoration: underline;
+        }
+        .progress-item .baseline-hint {
+            font-size: 10px;
+            color: #666;
         }
         .progress-item .progress-value {
             font-size: 18px;
@@ -584,7 +593,7 @@
 </head>
 <body>
     <div class="container">
-        <div class="timestamp">Genereeritud: 12.04.2026 12:35</div>
+        <div class="timestamp">Genereeritud: 12.04.2026 12:39</div>
 
         <div class="month-nav">
             <button onclick="prevMonth()">← Eelmine</button>
@@ -962,17 +971,44 @@
             updateProgress(allWorkouts);
         }
 
+        function getBaselines() {
+            try { return JSON.parse(localStorage.getItem('trenn_baselines') || '{}'); }
+            catch(e) { return {}; }
+        }
+
+        function setBaseline(name, weight) {
+            const baselines = getBaselines();
+            if (weight === null || weight === '') {
+                delete baselines[name];
+            } else {
+                baselines[name] = parseFloat(weight);
+            }
+            localStorage.setItem('trenn_baselines', JSON.stringify(baselines));
+        }
+
+        function editBaseline(name, currentWeight) {
+            const baselines = getBaselines();
+            const current = baselines[name];
+            const msg = current !== undefined
+                ? `${name}\nPraegune baseline: ${current}kg\nPR: ${currentWeight}kg\n\nSisesta uus baseline (kg) või tühjaks kustutamiseks:`
+                : `${name}\nPR: ${currentWeight}kg\n\nSisesta baseline (kg):`;
+            const input = prompt(msg, current !== undefined ? current : '');
+            if (input === null) return; // Cancel
+            if (input.trim() === '') {
+                setBaseline(name, null);
+            } else {
+                const val = parseFloat(input.trim().replace(',', '.'));
+                if (!isNaN(val) && val > 0) {
+                    setBaseline(name, val);
+                }
+            }
+            const allWorkouts = Object.values(workouts).flat();
+            updateProgress(allWorkouts);
+        }
+
         function updateProgress(allWorkouts) {
             const gymWorkouts = allWorkouts.filter(w => w.source === 'gymaholic');
-
-            // Baseline kaalud (Jaanuar 2026)
-            const baselines = {
-                'Barbell Bench Press': 60,
-                'Bent Over Barbell Row': 55,
-                'Romanian Deadlift': 50,
-                'Barbell Squat': 55,
-                'Barbell Curl': 30
-            };
+            const baselines = getBaselines();
 
             // Leia iga harjutuse parim tulemus
             const prs = {};
@@ -992,29 +1028,35 @@
                 }
             });
 
-            // Näita TOP 5 progressi
             const progressGrid = document.getElementById('progressGrid');
             progressGrid.innerHTML = '';
 
+            // Kõigepealt baseline'iga harjutused, siis ülejäänud
             const sortedPrs = Object.entries(prs)
-                .filter(([name]) => baselines[name]) // Ainult baseline harjutused
-                .sort((a, b) => b[1].weight - a[1].weight)
-                .slice(0, 5);
+                .sort((a, b) => {
+                    const aHas = baselines[a[0]] !== undefined ? 0 : 1;
+                    const bHas = baselines[b[0]] !== undefined ? 0 : 1;
+                    if (aHas !== bHas) return aHas - bHas;
+                    return b[1].weight - a[1].weight;
+                });
 
             sortedPrs.forEach(([name, pr]) => {
                 const baseline = baselines[name];
-                const diff = pr.weight - baseline;
-                const pct = ((diff / baseline) * 100).toFixed(0);
-                const changeClass = diff > 0 ? 'positive' : '';
-
                 const item = document.createElement('div');
                 item.className = 'progress-item';
+
+                let changeHtml = '<span class="baseline-hint">klõpsa baseline lisamiseks</span>';
+                if (baseline !== undefined) {
+                    const diff = pr.weight - baseline;
+                    const pct = ((diff / baseline) * 100).toFixed(0);
+                    const changeClass = diff > 0 ? 'positive' : '';
+                    changeHtml = `<span class="${changeClass}">Baseline: ${baseline}kg → ${diff > 0 ? '+' : ''}${diff}kg (${diff > 0 ? '+' : ''}${pct}%)</span>`;
+                }
+
                 item.innerHTML = `
-                    <div class="exercise-name">${name}</div>
+                    <div class="exercise-name" onclick="editBaseline('${name.replace(/'/g, "\\'")}', ${pr.weight})">${name}</div>
                     <div class="progress-value">${pr.sets}×${pr.reps} @ ${pr.weight}kg</div>
-                    <div class="progress-change ${changeClass}">
-                        Baseline: ${baseline}kg → ${diff > 0 ? '+' : ''}${diff}kg (${diff > 0 ? '+' : ''}${pct}%)
-                    </div>
+                    <div class="progress-change">${changeHtml}</div>
                 `;
                 progressGrid.appendChild(item);
             });
