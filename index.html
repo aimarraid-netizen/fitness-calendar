@@ -589,7 +589,7 @@
 </head>
 <body>
     <div class="container">
-        <div class="timestamp">Genereeritud: 12.04.2026 12:45</div>
+        <div class="timestamp">Genereeritud: 12.04.2026 12:48</div>
 
         <div class="month-nav">
             <button onclick="prevMonth()">← Eelmine</button>
@@ -742,9 +742,10 @@
 
                     dayEl.onclick = () => showDetails(dateStr, dayWorkouts);
 
+                    const benchSvg = `<svg viewBox="0 0 36 36" width="20" height="20" style="vertical-align:middle"><rect x="2" y="14" width="6" height="8" rx="1.5" fill="#888"/><rect x="28" y="14" width="6" height="8" rx="1.5" fill="#888"/><rect x="6" y="16.5" width="24" height="3" rx="1" fill="#ccc"/><rect x="8" y="12" width="3" height="12" rx="1" fill="#aaa"/><rect x="25" y="12" width="3" height="12" rx="1" fill="#aaa"/></svg>`;
                     const icons = {
                         'gym-jalad': '🦵',
-                        'gym-rind': '🏋️',
+                        'gym-rind': benchSvg,
                         'gym-selg': '💪',
                         'walking': '🚶',
                         'running': '🏃',
