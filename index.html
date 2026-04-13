@@ -258,7 +258,7 @@
         /* Stats */
         .stats {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
             gap: 8px;
             margin-top: 20px;
         }
@@ -404,7 +404,7 @@
             }
 
             .stats {
-                grid-template-columns: repeat(4, 1fr);
+                grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
                 gap: 4px;
                 margin-top: 12px;
             }
@@ -434,13 +434,13 @@
             .day { min-height: 48px; padding: 5px 2px; }
             .day-number { font-size: 12px; }
             .day-name { font-size: 8px; }
-            .stats { grid-template-columns: repeat(4, 1fr); }
+            .stats { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="timestamp">Genereeritud: 13.04.2026 11:47</div>
+        <div class="timestamp">Genereeritud: 13.04.2026 11:50</div>
 
         <div class="month-nav">
             <button onclick="prevMonth()">&#8249;</button>
@@ -466,6 +466,14 @@
             <div class="stat-card">
                 <div class="stat-label">🚴 Rattasõit</div>
                 <div class="stat-value" id="cycleCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">🏃 Jooksmine</div>
+                <div class="stat-value" id="runCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">⛰️ Matkamine</div>
+                <div class="stat-value" id="hikeCount">0</div>
             </div>
         </div>
 
@@ -785,6 +793,8 @@
                 walkCount: monthWorkouts.filter(w => w.workout_type === 'walking').length,
                 swimCount: monthWorkouts.filter(w => w.workout_type === 'swimming').length,
                 cycleCount: monthWorkouts.filter(w => w.workout_type === 'cycling').length,
+                runCount: monthWorkouts.filter(w => w.workout_type === 'running').length,
+                hikeCount: monthWorkouts.filter(w => w.workout_type === 'hiking').length,
             };
             Object.entries(statCounts).forEach(([id, count]) => {
                 const el = document.getElementById(id);
