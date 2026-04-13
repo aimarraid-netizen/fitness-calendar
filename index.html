@@ -410,7 +410,7 @@
 </head>
 <body>
     <div class="container">
-        <div class="timestamp">Genereeritud: 13.04.2026 11:25</div>
+        <div class="timestamp">Genereeritud: 13.04.2026 11:29</div>
 
         <div class="month-nav">
             <button onclick="prevMonth()">&#8249;</button>
@@ -878,7 +878,8 @@
                                     borderColor: TYPE_COLORS[type],
                                     backgroundColor: TYPE_COLORS[type] + '33',
                                     borderWidth: 2,
-                                    tension: 0.3,
+                                    cubicInterpolationMode: 'monotone',
+                                    tension: 0,
                                     fill: true,
                                     pointRadius: 2,
                                     pointHoverRadius: 4
