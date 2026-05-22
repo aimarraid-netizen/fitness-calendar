@@ -27,6 +27,15 @@ def exercise_status(sessions):
     last = sessions[-1]
     prev = sessions[-2]
 
+    # aja-põhine harjutus (Plank): võrdle kestust sekundites
+    ld, pd = last.get("top_duration"), prev.get("top_duration")
+    if ld is not None and pd is not None:
+        if ld > pd:
+            return "areneb"
+        if ld < pd:
+            return "regress"
+        return _check_plateau(sessions, key="duration")
+
     # varustusvahetus -> neutraalne (ei saa võrrelda õunu apelsinidega)
     if last["equipment"] != prev["equipment"]:
         return "vahetus"
@@ -71,6 +80,8 @@ def _check_plateau(sessions, key="weight", n=3):
     recent = sessions[-n:]
     if key == "weight":
         vals = [(s["work_weight"], s["top_reps"]) for s in recent]
+    elif key == "duration":
+        vals = [s.get("top_duration") for s in recent]
     else:
         vals = [s["top_reps"] for s in recent]
     if len(set(vals)) == 1:

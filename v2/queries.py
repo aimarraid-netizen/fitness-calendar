@@ -29,7 +29,7 @@ def exercise_sessions(conn, exercise_name):
     """
     rows = conn.execute(
         """SELECT w.date, w.timestamp, s.set_number, s.reps, s.weight_kg,
-                  s.equipment, s.total_volume
+                  s.equipment, s.total_volume, s.duration_sec
            FROM sets s JOIN workouts w ON s.workout_id=w.id
            WHERE s.exercise_name=?
            ORDER BY w.timestamp, s.set_number""",
@@ -42,14 +42,17 @@ def exercise_sessions(conn, exercise_name):
             sessions[key] = {"date": r["date"], "timestamp": r["timestamp"],
                              "equipment": r["equipment"], "sets": [],
                              "total_volume": 0.0}
-        sessions[key]["sets"].append({"reps": r["reps"], "weight": r["weight_kg"]})
+        sessions[key]["sets"].append({"reps": r["reps"], "weight": r["weight_kg"],
+                                       "duration": r["duration_sec"]})
         sessions[key]["total_volume"] += r["total_volume"] or 0.0
     result = []
     for s in sessions.values():
         weights = [x["weight"] for x in s["sets"] if x["weight"]]
         repvals = [x["reps"] for x in s["sets"] if x["reps"]]
+        durs = [x["duration"] for x in s["sets"] if x["duration"]]
         s["top_weight"] = max(weights) if weights else None
         s["top_reps"] = max(repvals) if repvals else None
+        s["top_duration"] = max(durs) if durs else None
         # "töökaal" = enim korratud kaal (mode), muidu max
         s["work_weight"] = max(set(weights), key=weights.count) if weights else None
         result.append(s)

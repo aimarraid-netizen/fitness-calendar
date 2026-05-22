@@ -107,9 +107,17 @@ let chartRef=null;
 
 function eq(e){return EQUIP[e]||e||"";}
 function fmtSet(g){
+  if(g.duration!=null&&g.duration>0){
+    return `${g.count}×${fmtDur(g.duration)}`;
+  }
   let r=g.reps!=null?g.reps:"–";
   let w=g.weight!=null?` · ${g.weight}kg`:"";
   return `${g.count}×${r}${w}`;
+}
+function fmtDur(s){
+  if(s>=60&&s%60===0)return`${s/60}min`;
+  if(s>=60)return`${Math.floor(s/60)}min ${s%60}s`;
+  return`${s}s`;
 }
 // sparkline mini-svg
 function spark(hist,key){
@@ -249,28 +257,45 @@ function renderExercise(app){
   let html=`<div class="card"><div class="row">
     <div><span class="stat st-${st}">${STLABEL[st]||st}</span>
     ${ex.weeks_stuck&&st==="seisab"?`<span class="muted" style="margin-left:8px">~${ex.weeks_stuck} näd</span>`:""}</div>
-    ${ex.pr?`<div style="text-align:right"><div class="muted">rekord</div><div class="title">${ex.pr.weight!=null?ex.pr.weight+"kg × "+ex.pr.reps:ex.pr.reps+" kordust"}</div></div>`:""}
+    ${ex.pr?`<div style="text-align:right"><div class="muted">rekord</div><div class="title">${prText(ex)}</div></div>`:""}
   </div></div>`;
-  // chart toggle
-  html+=`<div class="seg"><button class="on" onclick="setChart('weight',this)">Kaal</button>
-    <button onclick="setChart('reps',this)">Kordused</button>
-    <button onclick="setChart('volume',this)">Maht</button></div>`;
+  // chart toggle (aja-põhisel harjutusel "Aeg" asemel)
+  if(ex.is_time){
+    html+=`<div class="seg"><button class="on" onclick="setChart('duration',this)">Aeg</button></div>`;
+  }else{
+    html+=`<div class="seg"><button class="on" onclick="setChart('weight',this)">Kaal</button>
+      <button onclick="setChart('reps',this)">Kordused</button>
+      <button onclick="setChart('volume',this)">Maht</button></div>`;
+  }
   html+=`<div class="card"><div class="chart-box"><canvas id="exchart"></canvas></div></div>`;
   // history list
   html+=`<div class="title" style="margin:16px 0 10px">Ajalugu</div><div class="card">`;
   [...ex.history].reverse().forEach(h=>{
-    let val=h.weight!=null?`${h.weight}kg × ${h.reps}`:`${h.reps!=null?h.reps+" kordust":"–"}`;
+    let val;
+    if(h.duration!=null&&h.duration>0)val=fmtDur(h.duration);
+    else if(h.weight!=null)val=`${h.weight}kg × ${h.reps}`;
+    else val=h.reps!=null?`${h.reps} kordust`:"–";
     html+=`<div class="histline"><span class="hd">${fmtDate(h.date)} · ${eq(h.equipment)}</span><span>${val}</span></div>`;
   });
   html+=`</div>`;
   app.innerHTML=html;
-  // vaikimisi: kui kaaluandmeid napib (TRX/kehakaal), näita kordusi
-  const wpts=ex.history.filter(h=>h.weight!=null).length;
-  const defKey=wpts>=2?"weight":"reps";
-  if(defKey!=="weight"){
-    document.querySelectorAll(".seg button").forEach((b,i)=>b.classList.toggle("on",i===1));
+  // vaikegraafik: aja-põhine -> duration; kaaluandmeid napib -> kordused
+  let defKey="weight";
+  if(ex.is_time)defKey="duration";
+  else{
+    const wpts=ex.history.filter(h=>h.weight!=null).length;
+    defKey=wpts>=2?"weight":"reps";
+    if(defKey!=="weight")document.querySelectorAll(".seg button").forEach((b,i)=>b.classList.toggle("on",i===1));
   }
   drawChart(defKey);
+}
+function prText(ex){
+  const p=ex.pr;
+  if(ex.is_time&&ex.history.length){
+    const md=Math.max(...ex.history.map(h=>h.duration||0));
+    return md?fmtDur(md):"—";
+  }
+  return p.weight!=null?`${p.weight}kg × ${p.reps}`:`${p.reps} kordust`;
 }
 let curChartKey="weight";
 function setChart(key,btn){
@@ -282,10 +307,10 @@ function drawChart(key){
   const ex=DATA.exercises[view.ex];
   const h=ex.history;
   const labels=h.map(x=>fmtDate(x.date));
-  const data=h.map(x=>key==="weight"?x.weight:key==="reps"?x.reps:x.volume);
+  const data=h.map(x=>key==="weight"?x.weight:key==="reps"?x.reps:key==="duration"?(x.duration!=null?Math.round(x.duration/60*10)/10:null):x.volume);
   if(chartRef)chartRef.destroy();
   const ctx=document.getElementById("exchart");
-  const lbl=key==="weight"?"Kaal (kg)":key==="reps"?"Kordused":"Maht (kg)";
+  const lbl=key==="weight"?"Kaal (kg)":key==="reps"?"Kordused":key==="duration"?"Kestus (min)":"Maht (kg)";
   chartRef=new Chart(ctx,{type:"line",data:{labels,datasets:[{label:lbl,data,
     borderColor:"#2f81f7",backgroundColor:"rgba(47,129,247,.12)",fill:true,tension:.3,
     pointRadius:4,pointBackgroundColor:"#2f81f7",spanGaps:true}]},

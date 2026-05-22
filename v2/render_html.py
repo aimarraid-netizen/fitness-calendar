@@ -21,12 +21,13 @@ def group_sets(sets):
     """Grupeeri järjestikused sama (kaal,kordused) seeriad: N × reps · kaal."""
     groups = []
     for s in sets:
-        key = (s["reps"], s["weight_kg"])
+        key = (s["reps"], s["weight_kg"], s["duration_sec"])
         if groups and groups[-1]["key"] == key:
             groups[-1]["count"] += 1
         else:
             groups.append({"key": key, "count": 1, "reps": s["reps"],
-                           "weight": s["weight_kg"], "equipment": s["equipment"]})
+                           "weight": s["weight_kg"], "duration": s["duration_sec"],
+                           "equipment": s["equipment"]})
     return groups
 
 
@@ -54,8 +55,10 @@ def build_payload(conn):
                 "name": name,
                 "muscle": cfg.muscle_for(name),
                 "is_cardio": cfg.is_cardio(name),
+                "is_time": cfg.is_time_based(name),
                 "groups": [{"count": g["count"], "reps": g["reps"],
-                            "weight": g["weight"], "equipment": g["equipment"]}
+                            "weight": g["weight"], "duration": g["duration"],
+                            "equipment": g["equipment"]}
                            for g in grouped],
             })
         wlist.append({
@@ -82,12 +85,14 @@ def build_payload(conn):
             "muscle": cfg.muscle_for(name),
             "equipment": (sess[-1]["equipment"] if sess else None),
             "is_cardio": cfg.is_cardio(name),
+            "is_time": cfg.is_time_based(name),
             "status": info.get("status", "uus"),
             "weeks_stuck": info.get("weeks_stuck"),
             "pr": prs.get(name),
             "history": [
                 {"date": s["date"], "weight": s["work_weight"],
                  "top_weight": s["top_weight"], "reps": s["top_reps"],
+                 "duration": s.get("top_duration"),
                  "volume": round(s["total_volume"]), "equipment": s["equipment"]}
                 for s in sess
             ],

@@ -88,6 +88,48 @@ def set_default_equipment(conn, exercise, equipment):
     return f"✓ {exercise}: püsiv vaikevarustus → {equipment}"
 
 
+def set_duration(conn, exercise, seconds, date=None, sets=None):
+    """Määra aja-põhise harjutuse (Plank) kestus sekundites.
+
+    'Plank 3×1min' -> set_duration(c, 'Plank', 60) (kõik selle päeva seeriad 60s).
+    sets=N -> kirjuta täpselt N seeriat (kui logimisel puudusid).
+    """
+    # leia sihtsessioon
+    if date:
+        wrow = conn.execute("SELECT id FROM workouts WHERE date=? LIMIT 1", (date,)).fetchone()
+    else:
+        wrow = conn.execute(
+            """SELECT w.id FROM workouts w JOIN sets s ON s.workout_id=w.id
+               WHERE s.exercise_name=? ORDER BY w.timestamp DESC LIMIT 1""",
+            (exercise,),
+        ).fetchone()
+    if not wrow:
+        return f"{exercise}: pole andmeid ({date or 'uusim'})"
+    wid = wrow["id"]
+    existing = conn.execute(
+        "SELECT id FROM sets WHERE exercise_name=? AND workout_id=? ORDER BY set_number",
+        (exercise, wid),
+    ).fetchall()
+    if sets is not None:
+        # taasta täpne seeriate arv
+        conn.execute("DELETE FROM sets WHERE exercise_name=? AND workout_id=?", (exercise, wid))
+        for i in range(1, sets + 1):
+            conn.execute(
+                """INSERT INTO sets (workout_id, exercise_name, set_number, reps,
+                       weight_kg, equipment, duration_sec)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (wid, exercise, i, None, None, cfg.equipment_for(exercise), seconds),
+            )
+        n = sets
+    else:
+        n = conn.execute(
+            "UPDATE sets SET duration_sec=?, reps=NULL WHERE exercise_name=? AND workout_id=?",
+            (seconds, exercise, wid),
+        ).rowcount
+    conn.commit()
+    return f"✓ {exercise}: {n}×{seconds}s kestus salvestatud"
+
+
 def add_note(conn, exercise, note, date=None):
     """Lisa märkus harjutuse seeriatele (lives kontekst)."""
     if date:
@@ -142,6 +184,12 @@ if __name__ == "__main__":
     elif cmd == "note":
         date = sys.argv[4] if len(sys.argv) > 4 else None
         print(add_note(conn, sys.argv[2], sys.argv[3], date))
+    elif cmd == "duration":
+        # duration <harjutus> <sekundid> [kuupäev] [seeriad]
+        secs = int(sys.argv[3])
+        date = sys.argv[4] if len(sys.argv) > 4 else None
+        sets = int(sys.argv[5]) if len(sys.argv) > 5 else None
+        print(set_duration(conn, sys.argv[2], secs, date, sets))
     elif cmd == "import":
         print(import_csv(conn, sys.argv[2]))
         regen_html()

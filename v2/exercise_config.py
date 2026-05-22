@@ -83,6 +83,13 @@ CARDIO_EXERCISES = {
     "Running",
 }
 
+# Aja-põhised harjutused: mõõdetakse sekundites (hoid), mitte kordustes/kaalus.
+# Gymaholic ekspordib need valesti (reps=1, dur=0), seega kestus tuleb logida
+# käsitsi Kratti kaudu või CSV TIME-veerust.
+TIME_BASED = {
+    "Plank",
+}
+
 
 def equipment_for(name):
     return DEFAULT_EQUIPMENT.get(name)
@@ -94,3 +101,7 @@ def muscle_for(name):
 
 def is_cardio(name):
     return name in CARDIO_EXERCISES
+
+
+def is_time_based(name):
+    return name in TIME_BASED
