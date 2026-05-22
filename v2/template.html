@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0d1117">
+<title>Trenn</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0d1117; --card:#161b22; --card2:#1c2330; --border:#262d3a;
+  --txt:#e6edf3; --dim:#8b949e; --accent:#2f81f7; --accent2:#388bfd;
+  --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#58a6ff; --gray:#6e7681;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  font-size:16px;line-height:1.5;padding-bottom:80px;overscroll-behavior-y:none}
+.wrap{max-width:560px;margin:0 auto;padding:16px}
+header{position:sticky;top:0;background:rgba(13,17,23,.92);backdrop-filter:blur(10px);
+  z-index:50;padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+header .back{font-size:22px;color:var(--accent);cursor:pointer;display:none;line-height:1}
+header h1{font-size:18px;font-weight:600;flex:1}
+header .sub{font-size:12px;color:var(--dim);font-weight:400}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
+.card.tap{cursor:pointer;transition:transform .08s,background .15s}
+.card.tap:active{transform:scale(.985);background:var(--card2)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.chip{font-size:12px;padding:3px 9px;border-radius:20px;background:var(--card2);color:var(--dim);border:1px solid var(--border)}
+.chip.accent{background:rgba(47,129,247,.15);color:var(--blue);border-color:rgba(47,129,247,.3)}
+.muted{color:var(--dim);font-size:13px}
+.big{font-size:22px;font-weight:700}
+.title{font-size:16px;font-weight:600;margin-bottom:2px}
+/* Kratt notes */
+.krat{background:linear-gradient(135deg,#161b22,#1a2230);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:14px}
+.krat h3{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);margin-bottom:10px;font-weight:600}
+.krat .note{font-size:14px;padding:7px 0;border-top:1px solid var(--border);color:var(--txt)}
+.krat .note:first-of-type{border-top:none}
+/* calendar */
+.calhdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.calhdr button{background:var(--card2);border:1px solid var(--border);color:var(--txt);width:38px;height:38px;border-radius:10px;font-size:18px;cursor:pointer}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cald{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  border-radius:9px;font-size:13px;background:var(--card2);color:var(--dim);position:relative;border:1px solid transparent}
+.cald.dow{background:none;color:var(--dim);font-size:11px;aspect-ratio:auto;padding:4px 0;font-weight:600}
+.cald.empty{background:none}
+.cald.has{cursor:pointer;color:var(--txt);font-weight:600}
+.cald.has.selg{background:rgba(63,185,80,.18);border-color:rgba(63,185,80,.4)}
+.cald.has.rind{background:rgba(47,129,247,.18);border-color:rgba(47,129,247,.4)}
+.cald.has.jalad{background:rgba(210,153,34,.18);border-color:rgba(210,153,34,.4)}
+.cald .dot{width:5px;height:5px;border-radius:50%;margin-top:2px}
+.cald.has.selg .dot{background:var(--green)}.cald.has.rind .dot{background:var(--accent)}.cald.has.jalad .dot{background:var(--yellow)}
+/* exercise rows */
+.exrow{display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;cursor:pointer}
+.exrow:active{background:var(--card2)}
+.exrow .info{flex:1;min-width:0}
+.exrow .nm{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.exrow .meta{font-size:12px;color:var(--dim);margin-top:1px}
+.spark{width:64px;height:30px;flex-shrink:0}
+.stat{font-size:11px;padding:3px 8px;border-radius:20px;font-weight:600;flex-shrink:0}
+.st-areneb{background:rgba(63,185,80,.15);color:var(--green)}
+.st-seisab{background:rgba(210,153,34,.15);color:var(--yellow)}
+.st-regress{background:rgba(248,81,73,.15);color:var(--red)}
+.st-stabiilne{background:rgba(110,118,129,.15);color:var(--dim)}
+.st-vahetus{background:rgba(88,166,255,.15);color:var(--blue)}
+.st-uus{background:rgba(163,113,247,.15);color:#a371f7}
+/* set table */
+.settbl{margin-top:10px}
+.setline{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid var(--border);font-size:14px}
+.setline:first-child{border-top:none}
+.setline .exn{font-weight:600;flex:1}
+.setline .reps{color:var(--dim);font-variant-numeric:tabular-nums;text-align:right;min-width:120px}
+.exgroup{margin-bottom:4px}
+.delta{font-size:12px;font-weight:600;margin-left:6px}
+.d-up{color:var(--green)}.d-dn{color:var(--red)}.d-neutral{color:var(--gray)}
+.chart-box{height:240px;margin:14px 0;position:relative}
+.seg{display:flex;gap:6px;margin-bottom:14px;background:var(--card2);padding:4px;border-radius:10px}
+.seg button{flex:1;background:none;border:none;color:var(--dim);padding:8px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer}
+.seg button.on{background:var(--accent);color:#fff}
+.hide{display:none!important}
+.fade{animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.histline{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border);font-size:13px}
+.histline:first-child{border-top:none}
+.histline .hd{color:var(--dim)}
+.empty-state{text-align:center;color:var(--dim);padding:40px 20px}
+</style>
+</head>
+<body>
+<header>
+  <span class="back" id="back">‹</span>
+  <div style="flex:1">
+    <h1 id="title">Trenn</h1>
+    <div class="sub" id="subtitle"></div>
+  </div>
+</header>
+<div class="wrap" id="app"></div>
+
+<script>
+const DATA = /*__DATA__*/;
+const MONTHS=["Jaanuar","Veebruar","Märts","Aprill","Mai","Juuni","Juuli","August","September","Oktoober","November","Detsember"];
+const DOW=["E","T","K","N","R","L","P"];
+const EQUIP={trx:"TRX",machine:"masin",cable:"kaabel",barbell:"kang",dumbbell:"hantlid",bodyweight:"kehakaal",cardio:"kardio"};
+const STLABEL={areneb:"areneb",seisab:"seisab",regress:"langus",stabiilne:"stabiilne",vahetus:"vahetus",uus:"uus"};
+let view={name:"cal",calY:null,calM:null};
+let chartRef=null;
+
+function eq(e){return EQUIP[e]||e||"";}
+function fmtSet(g){
+  let r=g.reps!=null?g.reps:"–";
+  let w=g.weight!=null?` · ${g.weight}kg`:"";
+  return `${g.count}×${r}${w}`;
+}
+// sparkline mini-svg
+function spark(hist,key){
+  const vals=hist.map(h=>h[key]).filter(v=>v!=null);
+  if(vals.length<2)return"";
+  const mn=Math.min(...vals),mx=Math.max(...vals),rng=(mx-mn)||1;
+  const W=64,H=30,n=vals.length;
+  const pts=vals.map((v,i)=>`${(i/(n-1)*W).toFixed(1)},${(H-((v-mn)/rng)*H).toFixed(1)}`).join(" ");
+  const last=vals[vals.length-1],first=vals[0];
+  const col=last>first?"#3fb950":last<first?"#f85149":"#6e7681";
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function render(){
+  const app=document.getElementById("app");
+  const back=document.getElementById("back");
+  app.className="wrap fade";
+  if(view.name==="cal"){back.style.display="none";renderCal(app);}
+  else if(view.name==="workout"){back.style.display="block";renderWorkout(app);}
+  else if(view.name==="exercise"){back.style.display="block";renderExercise(app);}
+  else if(view.name==="exlist"){back.style.display="none";renderExList(app);}
+  window.scrollTo(0,0);
+}
+
+function setHeader(t,s){document.getElementById("title").textContent=t;document.getElementById("subtitle").textContent=s||"";}
+
+// ===== CALENDAR =====
+function renderCal(app){
+  setHeader("Trenn",`${DATA.stats.total_workouts} trenni · ${DATA.stats.total_exercises} harjutust`);
+  const byDate={};
+  DATA.workouts.forEach(w=>byDate[w.date]=w);
+  // krat notes
+  let html=`<div class="krat"><h3>📡 Kratt märkab</h3>`;
+  DATA.krat_notes.forEach(n=>html+=`<div class="note">${n}</div>`);
+  html+=`</div>`;
+  // muscle balance bars
+  html+=`<div class="card"><div class="title">⚖️ Lihasgrupi maht (4 näd)</div>`;
+  const mb=DATA.balance,mx=Math.max(...Object.values(mb));
+  for(const[mg,v]of Object.entries(mb)){
+    const pct=(v/mx*100).toFixed(0);
+    html+=`<div style="margin-top:9px"><div class="row"><span class="muted">${mg}</span><span class="muted">${Math.round(v)} kg</span></div>
+    <div style="height:7px;background:var(--card2);border-radius:5px;margin-top:4px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--accent);border-radius:5px"></div></div></div>`;
+  }
+  html+=`</div>`;
+  // calendar
+  if(view.calY==null){const last=DATA.workouts[0];const d=new Date(last.date);view.calY=d.getFullYear();view.calM=d.getMonth();}
+  html+=`<div class="card"><div class="calhdr"><button onclick="moveMonth(-1)">‹</button>
+    <div class="title" style="margin:0">${MONTHS[view.calM]} ${view.calY}</div>
+    <button onclick="moveMonth(1)">›</button></div><div class="calgrid">`;
+  DOW.forEach(d=>html+=`<div class="cald dow">${d}</div>`);
+  const first=new Date(view.calY,view.calM,1);
+  let start=(first.getDay()+6)%7; // Mon=0
+  const days=new Date(view.calY,view.calM+1,0).getDate();
+  for(let i=0;i<start;i++)html+=`<div class="cald empty"></div>`;
+  for(let d=1;d<=days;d++){
+    const ds=`${view.calY}-${String(view.calM+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    const w=byDate[ds];
+    if(w)html+=`<div class="cald has ${w.type}" onclick="openWorkout(${w.id})">${d}<span class="dot"></span></div>`;
+    else html+=`<div class="cald">${d}</div>`;
+  }
+  html+=`</div></div>`;
+  // recent workouts list
+  html+=`<div class="title" style="margin:18px 0 10px">Viimased trennid</div>`;
+  DATA.workouts.slice(0,8).forEach(w=>{
+    html+=`<div class="card tap" onclick="openWorkout(${w.id})"><div class="row">
+      <div><div class="title">${w.name||"Trenn"}</div><div class="muted">${fmtDate(w.date)} · ${w.duration||"?"}min · ${w.volume}kg</div></div>
+      <div style="text-align:right">${prCount(w)}</div></div></div>`;
+  });
+  app.innerHTML=html;
+}
+function prCount(w){
+  const m=(w.insight||"").match(/(\d+) uut rekord/);
+  if(m)return`<span class="chip accent">🏆 ${m[1]} PR</span>`;
+  if((w.insight||"").includes("rekord"))return`<span class="chip accent">🏆 PR</span>`;
+  return"";
+}
+function moveMonth(dir){view.calM+=dir;if(view.calM<0){view.calM=11;view.calY--}if(view.calM>11){view.calM=0;view.calY++}render();}
+function fmtDate(ds){const d=new Date(ds);return`${d.getDate()}. ${MONTHS[d.getMonth()].toLowerCase()}`;}
+
+// ===== WORKOUT =====
+function openWorkout(id){view.name="workout";view.wid=id;render();}
+function renderWorkout(app){
+  const w=DATA.workouts.find(x=>x.id===view.wid);
+  setHeader(w.name||"Trenn",`${fmtDate(w.date)} · ${w.duration||"?"}min`);
+  let html=``;
+  // stats
+  html+=`<div class="card"><div class="row">
+    <div><div class="big">${w.volume}</div><div class="muted">maht (kg)</div></div>
+    <div><div class="big">${w.duration||"?"}</div><div class="muted">minutit</div></div>
+    ${w.avg_hr?`<div><div class="big">${w.avg_hr}</div><div class="muted">⌀ pulss</div></div>`:""}
+    ${w.kcal?`<div><div class="big">${w.kcal}</div><div class="muted">kcal</div></div>`:""}
+  </div></div>`;
+  // insight
+  if(w.insight){
+    html+=`<div class="krat"><h3>📡 Kratt selle trenni kohta</h3>`;
+    w.insight.split("\n").forEach(l=>html+=`<div class="note">${l}</div>`);
+    html+=`</div>`;
+  }
+  // exercises
+  html+=`<div class="title" style="margin:16px 0 10px">Harjutused</div>`;
+  w.exercises.forEach(ex=>{
+    const exData=DATA.exercises[ex.name];
+    const delta=exDelta(ex.name);
+    html+=`<div class="card tap exgroup" onclick="openExercise('${esc(ex.name)}')">
+      <div class="row"><div class="setline" style="border:none;padding:0;flex:1">
+        <span class="exn">${ex.name}${delta}</span></div>
+        <span class="muted" style="font-size:18px">›</span></div>`;
+    ex.groups.forEach(g=>{
+      html+=`<div class="setline"><span class="muted">${eq(g.equipment)}</span><span class="reps">${fmtSet(g)}</span></div>`;
+    });
+    html+=`</div>`;
+  });
+  app.innerHTML=html;
+}
+// delta vs previous session, equipment-aware
+function exDelta(name){
+  const ex=DATA.exercises[name];if(!ex||ex.history.length<2)return"";
+  const h=ex.history,last=h[h.length-1],prev=h[h.length-2];
+  if(last.equipment!==prev.equipment)return` <span class="delta d-neutral">↔ vahetus</span>`;
+  if(last.weight!=null&&prev.weight!=null){
+    if(last.weight>prev.weight)return` <span class="delta d-up">▲ +${(last.weight-prev.weight).toFixed(1)}kg</span>`;
+    if(last.weight<prev.weight)return` <span class="delta d-dn">▼ ${(last.weight-prev.weight).toFixed(1)}kg</span>`;
+  }
+  if(last.reps!=null&&prev.reps!=null){
+    if(last.reps>prev.reps)return` <span class="delta d-up">▲ +${last.reps-prev.reps}</span>`;
+    if(last.reps<prev.reps)return` <span class="delta d-dn">▼ ${last.reps-prev.reps}</span>`;
+  }
+  return` <span class="delta d-neutral">=</span>`;
+}
+
+// ===== EXERCISE =====
+function openExercise(name){view.name="exercise";view.ex=name;render();}
+function renderExercise(app){
+  const ex=DATA.exercises[view.ex];
+  setHeader(ex.name,`${ex.muscle} · ${eq(ex.equipment)}`);
+  const st=ex.status;
+  let html=`<div class="card"><div class="row">
+    <div><span class="stat st-${st}">${STLABEL[st]||st}</span>
+    ${ex.weeks_stuck&&st==="seisab"?`<span class="muted" style="margin-left:8px">~${ex.weeks_stuck} näd</span>`:""}</div>
+    ${ex.pr?`<div style="text-align:right"><div class="muted">rekord</div><div class="title">${ex.pr.weight!=null?ex.pr.weight+"kg × "+ex.pr.reps:ex.pr.reps+" kordust"}</div></div>`:""}
+  </div></div>`;
+  // chart toggle
+  html+=`<div class="seg"><button class="on" onclick="setChart('weight',this)">Kaal</button>
+    <button onclick="setChart('reps',this)">Kordused</button>
+    <button onclick="setChart('volume',this)">Maht</button></div>`;
+  html+=`<div class="card"><div class="chart-box"><canvas id="exchart"></canvas></div></div>`;
+  // history list
+  html+=`<div class="title" style="margin:16px 0 10px">Ajalugu</div><div class="card">`;
+  [...ex.history].reverse().forEach(h=>{
+    let val=h.weight!=null?`${h.weight}kg × ${h.reps}`:`${h.reps!=null?h.reps+" kordust":"–"}`;
+    html+=`<div class="histline"><span class="hd">${fmtDate(h.date)} · ${eq(h.equipment)}</span><span>${val}</span></div>`;
+  });
+  html+=`</div>`;
+  app.innerHTML=html;
+  // vaikimisi: kui kaaluandmeid napib (TRX/kehakaal), näita kordusi
+  const wpts=ex.history.filter(h=>h.weight!=null).length;
+  const defKey=wpts>=2?"weight":"reps";
+  if(defKey!=="weight"){
+    document.querySelectorAll(".seg button").forEach((b,i)=>b.classList.toggle("on",i===1));
+  }
+  drawChart(defKey);
+}
+let curChartKey="weight";
+function setChart(key,btn){
+  document.querySelectorAll(".seg button").forEach(b=>b.classList.remove("on"));
+  btn.classList.add("on");drawChart(key);
+}
+function drawChart(key){
+  curChartKey=key;
+  const ex=DATA.exercises[view.ex];
+  const h=ex.history;
+  const labels=h.map(x=>fmtDate(x.date));
+  const data=h.map(x=>key==="weight"?x.weight:key==="reps"?x.reps:x.volume);
+  if(chartRef)chartRef.destroy();
+  const ctx=document.getElementById("exchart");
+  const lbl=key==="weight"?"Kaal (kg)":key==="reps"?"Kordused":"Maht (kg)";
+  chartRef=new Chart(ctx,{type:"line",data:{labels,datasets:[{label:lbl,data,
+    borderColor:"#2f81f7",backgroundColor:"rgba(47,129,247,.12)",fill:true,tension:.3,
+    pointRadius:4,pointBackgroundColor:"#2f81f7",spanGaps:true}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${lbl}: ${c.parsed.y??"–"}`}}},
+      scales:{x:{grid:{color:"#262d3a"},ticks:{color:"#8b949e",maxRotation:0,autoSkip:true,maxTicksLimit:6}},
+              y:{grid:{color:"#262d3a"},ticks:{color:"#8b949e"}}}}});
+}
+
+// ===== EXERCISE LIST =====
+function renderExList(app){
+  setHeader("Harjutused",`${DATA.stats.total_exercises} harjutust`);
+  const byMuscle={};
+  Object.values(DATA.exercises).forEach(e=>{if(e.is_cardio)return;(byMuscle[e.muscle]=byMuscle[e.muscle]||[]).push(e);});
+  let html="";
+  for(const[mg,list]of Object.entries(byMuscle)){
+    html+=`<div class="title" style="margin:16px 0 10px;text-transform:capitalize">${mg}</div>`;
+    list.forEach(e=>{
+      html+=`<div class="exrow" onclick="openExercise('${esc(e.name)}')">
+        <div class="info"><div class="nm">${e.name}</div>
+        <div class="meta">${eq(e.equipment)} · ${STLABEL[e.status]||e.status}</div></div>
+        ${spark(e.history,"weight")||spark(e.history,"reps")}
+        <span class="stat st-${e.status}">${STLABEL[e.status]||e.status}</span></div>`;
+    });
+  }
+  app.innerHTML=html;
+}
+
+function esc(s){return s.replace(/'/g,"\\'");}
+// nav
+document.getElementById("back").onclick=()=>{
+  if(view.name==="exercise"){view.name=view.fromList?"exlist":"workout";render();}
+  else if(view.name==="workout"){view.name="cal";render();}
+};
+// bottom nav
+const nav=document.createElement("div");
+nav.style.cssText="position:fixed;bottom:0;left:0;right:0;background:rgba(13,17,23,.95);backdrop-filter:blur(10px);border-top:1px solid var(--border);display:flex;z-index:60";
+nav.innerHTML=`
+  <div class="navbtn" data-v="cal" style="flex:1;text-align:center;padding:12px;cursor:pointer">📅<div style="font-size:11px;margin-top:2px">Kalender</div></div>
+  <div class="navbtn" data-v="exlist" style="flex:1;text-align:center;padding:12px;cursor:pointer">💪<div style="font-size:11px;margin-top:2px">Harjutused</div></div>`;
+document.body.appendChild(nav);
+nav.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>{
+  const v=b.dataset.v;
+  if(v==="exercise")return;
+  view.name=v;view.fromList=(v==="exlist");render();
+});
+// wrapper for exlist->exercise back
+const _openEx=openExercise;
+openExercise=function(n){view.fromList=(view.name==="exlist");_openEx(n);};
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "last_updated": "2026-03-26",
+  "records": {
+    "Barbell Bench Press": {"weight": 65.0, "sets": 3, "reps": 6, "date": "2026-03-24"},
+    "Romanian Deadlift": {"weight": 60.0, "sets": 3, "reps": 10, "date": "2026-03-15"},
+    "Bent Over Barbell Row": {"weight": 60.0, "sets": 3, "reps": 10, "date": "2026-03-21"},
+    "Barbell Squat": {"weight": 55.0, "sets": 1, "reps": 10, "date": "2026-03-08"},
+    "Seated Cable Rows": {"weight": 55.0, "sets": 3, "reps": 11, "date": "2026-03-21"},
+    "Wide-Grip Lat Pulldown": {"weight": 50.0, "sets": 3, "reps": 11, "date": "2026-03-21"},
+    "Standing Calf Raise": {"weight": 40.0, "sets": 3, "reps": 25, "date": "2026-03-15"},
+    "Single-Leg Press": {"weight": 32.0, "sets": 3, "reps": 12, "date": "2026-02-14"},
+    "Barbell Curl": {"weight": 30.0, "sets": 3, "reps": 11, "date": "2026-03-21"},
+    "Lying Triceps Press": {"weight": 27.5, "sets": 3, "reps": 11, "date": "2026-03-24"},
+    "Face Pull": {"weight": 25.0, "sets": 3, "reps": 15, "date": "2026-02-07"},
+    "One-Arm Dumbbell Row": {"weight": 22.5, "sets": 3, "reps": 10, "date": "2026-02-17"},
+    "Triceps Pushdown with Rope": {"weight": 20.0, "sets": 1, "reps": 12, "date": "2026-02-15"},
+    "Seated Triceps Press": {"weight": 20.0, "sets": 3, "reps": 9, "date": "2026-03-24"},
+    "Incline Dumbbell Press": {"weight": 17.5, "sets": 3, "reps": 11, "date": "2026-03-24"},
+    "Seated Hammer Curls": {"weight": 15.0, "sets": 1, "reps": 6, "date": "2026-03-03"},
+    "Side Lateral Raise": {"weight": 7.0, "sets": 3, "reps": 15, "date": "2026-03-24"}
+  },
+  "baselines": {
+    "note": "Alguskaalud (jaanuar 2026)",
+    "Bench": 60,
+    "Row": 55,
+    "RDL": 50,
+    "Squat": 55,
+    "Curl": 30
+  }
+}

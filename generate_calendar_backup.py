@@ -1,0 +1,1461 @@
+#!/home/aimar/trenn/venv/bin/python3
+"""
+Genereeri interaktiivne HTML kalender treeningute jaoks
+"""
+
+import json
+from datetime import datetime
+from pathlib import Path
+from collections import defaultdict
+
+DATA_DIR = Path(__file__).parent / 'data'
+HISTORY_FILE = DATA_DIR / 'workout_history.json'
+ANALYSES_FILE = DATA_DIR / 'analyses.json'
+OUTPUT_FILE = Path(__file__).parent / 'calendar.html'
+
+def load_data():
+    """Lae workout_history.json ja CSV failid"""
+    # Lae Gymaholic (ainult gymaholic source)
+    with open(HISTORY_FILE, 'r') as f:
+        data = json.load(f)
+        all_workouts = data.get('workouts', [])
+        gym = [w for w in all_workouts if w.get('source') == 'gymaholic']
+
+    # Lae Workoutdoor
+    import csv
+    cardio = []
+    csv_dir = DATA_DIR / 'processed' / 'csv'
+    for csv_file in csv_dir.glob('*.csv'):
+        with open(csv_file, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                filename = csv_file.stem
+                cardio.append({
+                    'source': 'workoutdoor',
+                    'timestamp': row.get('timestamp', ''),
+                    'date': row.get('timestamp', '').split()[0],
+                    'workout_name': filename.split('_', 2)[2] if len(filename.split('_')) > 2 else 'Cardio',
+                    'workout_type': row.get('activity_type', 'cardio'),
+                    'duration_min': int(float(row.get('duration_sec', 0))) // 60,
+                    'distance': float(row.get('distance_m', 0)) / 1000,
+                    'avg_hr': int(float(row.get('avg_hr', 0))),
+                    'max_hr': int(float(row.get('max_hr', 0))),
+                    'kcal': int(float(row.get('calories', 0))),
+                })
+
+    return gym + cardio
+
+def load_analyses():
+    """Lae analüüsid JSON failist"""
+    if ANALYSES_FILE.exists():
+        with open(ANALYSES_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
+def generate_html(workouts):
+    """Genereeri HTML kalender"""
+
+    # Grupeeri treeningud kuupäeva järgi
+    by_date = defaultdict(list)
+    for w in workouts:
+        date = w.get('timestamp', w.get('date', ''))[:10]
+        by_date[date].append(w)
+
+    # Genereeri HTML
+    html = """<!DOCTYPE html>
+<html lang="et">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>Treeningute Kalender</title>
+
+    <!-- iOS Web App optimeeringud -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Trenn">
+
+    <!-- Cache control - värskenda alati -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <!-- Chart.js for progress graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; position: relative; }
+        h1 { text-align: center; margin-bottom: 30px; color: #4CAF50; }
+        .timestamp {
+            text-align: right;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .month-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #2a2a2a;
+            border-radius: 10px;
+        }
+        .month-nav button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .month-nav h2 { color: #fff; }
+
+        .calendar {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+            margin-bottom: 30px;
+        }
+        .day-header {
+            background: #2a2a2a;
+            padding: 10px;
+            text-align: center;
+            font-weight: bold;
+            border-radius: 5px;
+        }
+        .day {
+            background: #2a2a2a;
+            padding: 15px 10px;
+            text-align: center;
+            border-radius: 5px;
+            min-height: 80px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .day:hover { transform: scale(1.05); }
+        .day.empty { opacity: 0.3; cursor: default; }
+        .day.empty:hover { transform: none; }
+
+        .day.gym-jalad { background: #f44336; }
+        .day.gym-rind { background: #4CAF50; }
+        .day.gym-selg { background: #FFC107; }
+        .day.walking { background: #2196F3; }
+        .day.running { background: #FF9800; }
+        .day.cycling { background: #9C27B0; }
+        .day.hiking { background: #795548; }
+        .day.swimming { background: #00BCD4; }
+        .day.multi {
+            background: linear-gradient(135deg, #4CAF50 50%, #2196F3 50%);
+        }
+
+        .day-number { font-size: 20px; font-weight: bold; margin-bottom: 5px; }
+        .day-name { font-size: 13px; margin-top: 4px; font-weight: 600; line-height: 1.2; }
+        .day-cardio-info { font-size: 11px; margin-top: 2px; line-height: 1.2; opacity: 0.9; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        .modal.active { display: flex; align-items: center; justify-content: center; }
+        .modal-content {
+            background: #2a2a2a;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 1000px;
+            width: 95%;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .close {
+            font-size: 30px;
+            cursor: pointer;
+            color: #999;
+        }
+        .close:hover { color: #fff; }
+
+        .workout-analysis {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1a2a1a;
+            border-radius: 10px;
+            border-left: 4px solid #9C27B0;
+        }
+        .workout-analysis h3 { margin-bottom: 10px; color: #9C27B0; }
+        .analysis-text { color: #ccc; line-height: 1.6; }
+
+        .workout-details {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #1a1a1a;
+            border-radius: 10px;
+            border-left: 4px solid #4CAF50;
+        }
+        .workout-details.cardio { border-left-color: #2196F3; }
+        .workout-details h3 { margin-bottom: 10px; color: #4CAF50; }
+        .workout-details.cardio h3 { color: #2196F3; }
+        .workout-details p { margin: 5px 0; color: #ccc; }
+        .exercise { margin: 10px 0; padding-left: 15px; }
+
+        .workout-table {
+            width: 100%;
+            margin-top: 15px;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .workout-table th {
+            background: #1a1a1a;
+            padding: 10px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #4CAF50;
+            color: #4CAF50;
+        }
+        .workout-table td {
+            padding: 10px;
+            border-bottom: 1px solid #3a3a3a;
+            color: #ccc;
+        }
+        .workout-table tr:hover {
+            background: #333;
+        }
+        .workout-table .comparison {
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .workout-table .comparison.positive {
+            color: #4CAF50;
+        }
+        .workout-table .comparison.negative {
+            color: #ff9800;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .stat-card {
+            background: #2a2a2a;
+            padding: 10px 5px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-value { font-size: 24px; font-weight: bold; color: #4CAF50; margin: 5px 0; }
+        .stat-label { color: #999; font-size: 12px; }
+
+        .progress-section {
+            margin-top: 30px;
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .progress-section h3 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+        }
+        .progress-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .progress-item {
+            background: #1a1a1a;
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 3px solid #4CAF50;
+        }
+        .progress-item .exercise-name {
+            color: #ccc;
+            font-size: 14px;
+            margin-bottom: 5px;
+            cursor: pointer;
+        }
+        .progress-item .exercise-name:hover {
+            color: #fff;
+            text-decoration: underline;
+        }
+        .progress-item .baseline-hint {
+            font-size: 10px;
+            color: #666;
+        }
+        .progress-item .progress-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .progress-item .progress-change {
+            font-size: 12px;
+            color: #999;
+        }
+        .progress-item .progress-change.positive {
+            color: #4CAF50;
+        }
+        .recommendations {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 3px solid #2196F3;
+            color: #ccc;
+            line-height: 1.6;
+        }
+        .recommendations h4 {
+            color: #2196F3;
+            margin-bottom: 10px;
+        }
+
+        /* ===================================
+           EXERCISE PROGRESS SECTION
+           =================================== */
+        .exercise-progress-section {
+            margin-top: 30px;
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .exercise-progress-section h3 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+        }
+        .exercise-selector {
+            margin-bottom: 20px;
+        }
+        .exercise-selector select {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            background: #1a1a1a;
+            color: #fff;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .exercise-selector select:focus {
+            outline: none;
+            border-color: #66BB6A;
+        }
+        .chart-container {
+            position: relative;
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+        .exercise-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .exercise-stat-card {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 3px solid #4CAF50;
+        }
+        .exercise-stat-label {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 5px;
+        }
+        .exercise-stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .exercise-stat-change {
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        .exercise-stat-change.positive {
+            color: #4CAF50;
+        }
+
+        /* ===================================
+           MOBILE RESPONSIVE
+           =================================== */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            h1 {
+                font-size: 24px;
+                margin-bottom: 15px;
+                padding-top: 35px; /* Ruumi timestamp'ile */
+            }
+
+            .timestamp {
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                left: auto;
+                font-size: 10px;
+                padding: 5px 8px;
+                z-index: 100;
+            }
+
+            .month-nav {
+                padding: 10px;
+                margin-bottom: 15px;
+            }
+
+            .month-nav button {
+                padding: 12px 16px;
+                font-size: 14px;
+                min-width: 80px;
+                touch-action: manipulation; /* Touch optimization */
+            }
+
+            .month-nav h2 {
+                font-size: 18px;
+            }
+
+            /* Kalender grid - väiksem gap */
+            .calendar {
+                gap: 3px;
+                margin-bottom: 20px;
+            }
+
+            .day-header {
+                padding: 6px 2px;
+                font-size: 11px;
+            }
+
+            .day {
+                padding: 8px 4px;
+                min-height: 60px;
+                touch-action: manipulation;
+            }
+
+            .day-number {
+                font-size: 16px;
+                margin-bottom: 3px;
+            }
+
+            .day-name {
+                font-size: 10px;
+                margin-top: 2px;
+                line-height: 1.1;
+            }
+
+            .day-cardio-info {
+                font-size: 9px;
+                margin-top: 1px;
+            }
+
+            /* Modal kohandused */
+            .modal-content {
+                padding: 15px;
+                width: 98%;
+                max-height: 90vh;
+                margin: 10px;
+            }
+
+            .modal-header h2 {
+                font-size: 18px;
+            }
+
+            .close {
+                font-size: 28px;
+                padding: 5px;
+                min-width: 40px;
+                min-height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .workout-details {
+                padding: 12px;
+                margin-bottom: 15px;
+            }
+
+            .workout-details h3 {
+                font-size: 16px;
+            }
+
+            .workout-details p {
+                font-size: 13px;
+            }
+
+            .workout-table {
+                font-size: 11px;
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .workout-table th,
+            .workout-table td {
+                padding: 6px 4px;
+                font-size: 11px;
+            }
+
+            /* Stats grid - alati 4 veergu */
+            .stats {
+                grid-template-columns: repeat(4, 1fr);
+                gap: 6px;
+                margin-top: 15px;
+            }
+
+            .stat-card {
+                padding: 8px 4px;
+            }
+
+            .stat-value {
+                font-size: 20px;
+            }
+
+            .stat-label {
+                font-size: 10px;
+            }
+
+            /* Progress section */
+            .progress-section {
+                padding: 15px;
+                margin-top: 20px;
+            }
+
+            .progress-section h3 {
+                font-size: 18px;
+                margin-bottom: 12px;
+            }
+
+            .progress-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .progress-item {
+                padding: 10px;
+            }
+
+            .progress-item .exercise-name {
+                font-size: 12px;
+            }
+
+            .progress-item .progress-value {
+                font-size: 16px;
+            }
+
+            .progress-item .progress-change {
+                font-size: 11px;
+            }
+
+            .recommendations {
+                padding: 12px;
+                font-size: 13px;
+                line-height: 1.5;
+            }
+
+            .recommendations h4 {
+                font-size: 15px;
+            }
+
+            /* Exercise progress mobile */
+            .exercise-progress-section {
+                padding: 15px;
+                margin-top: 20px;
+            }
+
+            .exercise-progress-section h3 {
+                font-size: 18px;
+            }
+
+            .exercise-selector select {
+                font-size: 14px;
+                padding: 10px;
+            }
+
+            .exercise-stats {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+
+            .exercise-stat-card {
+                padding: 10px;
+            }
+
+            .exercise-stat-label {
+                font-size: 10px;
+            }
+
+            .exercise-stat-value {
+                font-size: 18px;
+            }
+
+            .chart-container {
+                padding: 10px;
+            }
+        }
+
+        /* Extra väikesed ekraanid (< 400px) */
+        @media (max-width: 400px) {
+            h1 {
+                font-size: 20px;
+            }
+
+            .month-nav h2 {
+                font-size: 16px;
+            }
+
+            .day {
+                min-height: 50px;
+                padding: 6px 2px;
+            }
+
+            .day-number {
+                font-size: 14px;
+            }
+
+            .day-name {
+                font-size: 9px;
+            }
+
+            .stats {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="timestamp">Genereeritud: """ + datetime.now().strftime('%d.%m.%Y %H:%M') + """</div>
+
+        <div class="month-nav">
+            <button onclick="prevMonth()">← Eelmine</button>
+            <h2 id="currentMonth"></h2>
+            <button onclick="nextMonth()">Järgmine →</button>
+        </div>
+
+        <div class="calendar" id="calendar"></div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">🏋️ Jõusaal</div>
+                <div class="stat-value" id="gymCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">🚶 Kõndimine</div>
+                <div class="stat-value" id="walkCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">🏊 Ujumine</div>
+                <div class="stat-value" id="swimCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">🚴 Rattasõit</div>
+                <div class="stat-value" id="cycleCount">0</div>
+            </div>
+        </div>
+
+        <div class="progress-section">
+            <h3>📈 Progress & Rekordid</h3>
+            <div class="progress-grid" id="progressGrid"></div>
+
+            <div class="recommendations" id="recommendations"></div>
+        </div>
+
+        <div class="exercise-progress-section">
+            <h3>📊 Harjutuste Progress</h3>
+
+            <div class="exercise-selector">
+                <select id="exerciseSelect" onchange="showExerciseProgress()">
+                    <option value="">-- Vali harjutus --</option>
+                </select>
+            </div>
+
+            <div id="exerciseStatsContainer" style="display: none;">
+                <div class="exercise-stats" id="exerciseStats"></div>
+
+                <div class="chart-container">
+                    <canvas id="progressChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="modal" onclick="closeModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2 id="modalDate"></h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        const workouts = """ + json.dumps(dict(by_date), ensure_ascii=False) + """;
+        const analyses = """ + json.dumps(load_analyses(), ensure_ascii=False) + """;
+
+        let currentYear = new Date().getFullYear();
+        let currentMonth = new Date().getMonth();
+
+        const monthNames = ['Jaanuar', 'Veebruar', 'Märts', 'Aprill', 'Mai', 'Juuni',
+                           'Juuli', 'August', 'September', 'Oktoober', 'November', 'Detsember'];
+        const dayNames = ['E', 'T', 'K', 'N', 'R', 'L', 'P'];
+
+        function findPreviousWorkout(workoutType, currentTimestamp) {
+            // Leia kõik sama tüüpi treeningud
+            const allWorkoutsFlat = [];
+            Object.keys(workouts).forEach(date => {
+                workouts[date].forEach(w => {
+                    if (w.source === 'gymaholic' && w.workout_type === workoutType && w.timestamp < currentTimestamp) {
+                        allWorkoutsFlat.push(w);
+                    }
+                });
+            });
+
+            // Sorteeri timestampi järgi kahanevas järjekorras ja võta esimene
+            allWorkoutsFlat.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+            return allWorkoutsFlat.length > 0 ? allWorkoutsFlat[0] : null;
+        }
+
+        function renderCalendar() {
+            const cal = document.getElementById('calendar');
+            cal.innerHTML = '';
+
+            // Päeva päised
+            dayNames.forEach(day => {
+                const header = document.createElement('div');
+                header.className = 'day-header';
+                header.textContent = day;
+                cal.appendChild(header);
+            });
+
+            const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+            // Tühjad ruudud
+            for (let i = 0; i < (firstDay || 7) - 1; i++) {
+                const empty = document.createElement('div');
+                empty.className = 'day empty';
+                cal.appendChild(empty);
+            }
+
+            // Päevad
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dayWorkouts = workouts[dateStr] || [];
+
+                const dayEl = document.createElement('div');
+                dayEl.className = 'day';
+
+                if (dayWorkouts.length > 0) {
+                    const types = [...new Set(dayWorkouts.map(w => {
+                        if (w.source === 'gymaholic') {
+                            return `gym-${w.workout_type}`;
+                        }
+                        return w.workout_type;
+                    }))];
+
+                    // Värvi kaart
+                    const colorMap = {
+                        'gym-jalad': '#f44336',   // Punane
+                        'gym-rind': '#4CAF50',    // Roheline
+                        'gym-selg': '#FFC107',    // Kollane
+                        'walking': '#2196F3',     // Sinine
+                        'running': '#FF9800',     // Oranž
+                        'cycling': '#9C27B0',     // Lilla
+                        'hiking': '#795548',      // Pruun
+                        'swimming': '#00BCD4'     // Tsüaan
+                    };
+
+                    if (types.length > 1) {
+                        // Dünaamiline gradient tegelike värvidega
+                        const colors = types.map(t => colorMap[t] || '#666').slice(0, 2);
+                        dayEl.style.background = `linear-gradient(135deg, ${colors[0]} 50%, ${colors[1]} 50%)`;
+                        dayEl.className += ' multi';
+                    } else {
+                        dayEl.className += ` ${types[0]}`;
+                    }
+
+                    dayEl.onclick = () => showDetails(dateStr, dayWorkouts);
+
+                    // Treeningu nimed
+                    let labels = [];
+                    dayWorkouts.forEach(w => {
+                        if (w.source === 'gymaholic') {
+                            const name = (w.workout_name || '').replace(/^\d+\.\s*/, '').trim();
+                            labels.push(`<div class="day-name">${name}</div>`);
+                        } else {
+                            const cardioNames = {
+                                'walking': 'Kõndimine',
+                                'running': 'Jooksmine',
+                                'cycling': 'Rattasõit',
+                                'hiking': 'Matkamine',
+                                'swimming': 'Ujumine'
+                            };
+                            const cardioName = cardioNames[w.workout_type] || w.workout_name || 'Kardio';
+                            const distanceInfo = w.distance > 0 ? `${w.distance.toFixed(1)}km` : '';
+                            labels.push(`<div class="day-name">${cardioName}</div>` +
+                                (distanceInfo ? `<div class="day-cardio-info">${distanceInfo}</div>` : ''));
+                        }
+                    });
+
+                    dayEl.innerHTML = `
+                        <div class="day-number">${day}</div>
+                        ${labels.join('')}
+                    `;
+                } else {
+                    dayEl.className += ' empty';
+                    dayEl.innerHTML = `<div class="day-number">${day}</div>`;
+                }
+
+                cal.appendChild(dayEl);
+            }
+
+            document.getElementById('currentMonth').textContent = `${monthNames[currentMonth]} ${currentYear}`;
+            updateStats();
+        }
+
+        function showDetails(date, dayWorkouts) {
+            const modal = document.getElementById('modal');
+            const modalDate = document.getElementById('modalDate');
+            const modalBody = document.getElementById('modalBody');
+
+            const [y, m, d] = date.split('-');
+            modalDate.textContent = `${parseInt(d)}. ${monthNames[parseInt(m) - 1]} ${y}`;
+
+            modalBody.innerHTML = '';
+
+            dayWorkouts.forEach(w => {
+                const div = document.createElement('div');
+                div.className = w.source === 'gymaholic' ? 'workout-details' : 'workout-details cardio';
+
+                if (w.source === 'gymaholic') {
+                    // Leia eelmine sama tüüpi treening
+                    const prevWorkout = findPreviousWorkout(w.workout_type, w.timestamp);
+
+                    let exerciseRows = '';
+                    if (w.exercises) {
+                        w.exercises.forEach(ex => {
+                            // Võrdlus eelmise trenniga
+                            let weightComparison = '';
+                            let repsComparison = '';
+                            let weightClass = '';
+                            let repsClass = '';
+
+                            if (prevWorkout && prevWorkout.exercises) {
+                                const prevEx = prevWorkout.exercises.find(e => e.name === ex.name);
+                                if (prevEx) {
+                                    const weightDiff = ex.weight_kg - prevEx.weight_kg;
+                                    const repsDiff = ex.reps - prevEx.reps;
+
+                                    if (weightDiff > 0) {
+                                        weightComparison = ` <span class="comparison positive">(+${weightDiff}kg)</span>`;
+                                        weightClass = 'positive';
+                                    } else if (weightDiff < 0) {
+                                        weightComparison = ` <span class="comparison negative">(${weightDiff}kg)</span>`;
+                                        weightClass = 'negative';
+                                    }
+
+                                    if (repsDiff > 0) {
+                                        repsComparison = ` <span class="comparison positive">(+${repsDiff})</span>`;
+                                        repsClass = 'positive';
+                                    } else if (repsDiff < 0) {
+                                        repsComparison = ` <span class="comparison negative">(${repsDiff})</span>`;
+                                        repsClass = 'negative';
+                                    }
+                                }
+                            }
+
+                            // Määra mis näidata Maht veerus
+                            let volumeDisplay = '-';
+                            if (ex.total_volume > 0) {
+                                volumeDisplay = ex.total_volume.toFixed(0) + ' kg';
+                            } else if (ex.duration_sec > 0) {
+                                // Kui on kestus (Rowing, Walking), näita seda
+                                const totalMins = Math.floor(ex.duration_sec / 60);
+                                if (totalMins < 60) {
+                                    // Alla tunni: "5 min"
+                                    volumeDisplay = `${totalMins} min`;
+                                } else {
+                                    // Üle tunni: "1:05" (hh:mm)
+                                    const hours = Math.floor(totalMins / 60);
+                                    const mins = totalMins % 60;
+                                    volumeDisplay = `${hours}:${mins.toString().padStart(2, '0')}`;
+                                }
+                            }
+
+                            exerciseRows += `
+                                <tr>
+                                    <td>${ex.name}</td>
+                                    <td>${ex.sets}</td>
+                                    <td>${ex.reps}${repsComparison}</td>
+                                    <td>${ex.weight_kg > 0 ? ex.weight_kg + ' kg' + weightComparison : '-'}</td>
+                                    <td>${volumeDisplay}</td>
+                                    <td>${ex.avg_hr > 0 ? ex.avg_hr + ' bpm' : '-'}</td>
+                                </tr>
+                            `;
+                        });
+                    }
+
+                    // Eemalda numbrid trenni nimest (nt "1. Jalad & kõht" -> "Jalad & kõht")
+                    const cleanWorkoutName = w.workout_name ? w.workout_name.replace(/^\d+\.\s*/, '') : 'Jõutreening';
+
+                    div.innerHTML = `
+                        <h3>🏋️ ${cleanWorkoutName}</h3>
+                        <p><strong>Kestus:</strong> ${w.duration_min || 0} min | <strong>Kogumaht:</strong> ${(w.total_volume || 0).toFixed(0)} kg${w.avg_hr && w.avg_hr > 0 ? ` | <strong>Keskmine pulss:</strong> ${w.avg_hr} bpm` : ''}</p>
+                        <table class="workout-table">
+                            <thead>
+                                <tr>
+                                    <th>Harjutus</th>
+                                    <th>Setid</th>
+                                    <th>Kordused</th>
+                                    <th>Kaal</th>
+                                    <th>Maht</th>
+                                    <th>Pulss</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${exerciseRows}
+                            </tbody>
+                        </table>
+                    `;
+                } else {
+                    const icon = {
+                        'walking': '🚶',
+                        'running': '🏃',
+                        'cycling': '🚴',
+                        'hiking': '⛰️',
+                        'swimming': '🏊'
+                    }[w.workout_type] || '🏃';
+
+                    div.innerHTML = `
+                        <h3>${icon} ${w.workout_name}</h3>
+                        ${w.distance > 0 ? `<p><strong>Distants:</strong> ${w.distance.toFixed(2)} km</p>` : ''}
+                        <p><strong>Kestus:</strong> ${w.duration_min} min</p>
+                        <p><strong>HR:</strong> ${w.avg_hr} avg, ${w.max_hr} max</p>
+                        ${w.kcal > 0 ? `<p><strong>Kalorid:</strong> ${w.kcal} kcal</p>` : ''}
+                    `;
+                }
+
+                modalBody.appendChild(div);
+            });
+
+            // Analüüsi sektsioon
+            if (analyses[date]) {
+                const analysisDiv = document.createElement('div');
+                analysisDiv.className = 'workout-analysis';
+                analysisDiv.innerHTML = `
+                    <h3>Analüüs</h3>
+                    <div class="analysis-text">${analyses[date].replace(/\\n/g, '<br>')}</div>
+                `;
+                modalBody.appendChild(analysisDiv);
+            }
+
+            modal.classList.add('active');
+        }
+
+        function closeModal(event) {
+            if (!event || event.target.id === 'modal') {
+                document.getElementById('modal').classList.remove('active');
+            }
+        }
+
+        function prevMonth() {
+            currentMonth--;
+            if (currentMonth < 0) {
+                currentMonth = 11;
+                currentYear--;
+            }
+            renderCalendar();
+        }
+
+        function nextMonth() {
+            currentMonth++;
+            if (currentMonth > 11) {
+                currentMonth = 0;
+                currentYear++;
+            }
+            renderCalendar();
+        }
+
+        function updateStats() {
+            // Filtreeri ainult valitud kuu treeningud
+            const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+            const monthWorkouts = Object.entries(workouts)
+                .filter(([date]) => date.startsWith(monthPrefix))
+                .flatMap(([, ws]) => ws);
+
+            document.getElementById('gymCount').textContent = monthWorkouts.filter(w => w.source === 'gymaholic').length;
+            document.getElementById('walkCount').textContent = monthWorkouts.filter(w => w.workout_type === 'walking').length;
+            document.getElementById('swimCount').textContent = monthWorkouts.filter(w => w.workout_type === 'swimming').length;
+            document.getElementById('cycleCount').textContent = monthWorkouts.filter(w => w.workout_type === 'cycling').length;
+
+            // Progressi arvutamine (kogu ajalugu)
+            const allWorkouts = Object.values(workouts).flat();
+            updateProgress(allWorkouts);
+        }
+
+        function getBaselines() {
+            try { return JSON.parse(localStorage.getItem('trenn_baselines') || '{}'); }
+            catch(e) { return {}; }
+        }
+
+        function setBaseline(name, weight) {
+            const baselines = getBaselines();
+            if (weight === null || weight === '') {
+                delete baselines[name];
+            } else {
+                baselines[name] = parseFloat(weight);
+            }
+            localStorage.setItem('trenn_baselines', JSON.stringify(baselines));
+        }
+
+        function editBaseline(name, currentWeight) {
+            const baselines = getBaselines();
+            const current = baselines[name];
+            const msg = current !== undefined
+                ? `${name}\\nPraegune baseline: ${current}kg\\nPR: ${currentWeight}kg\\n\\nSisesta uus baseline (kg) või tühjaks kustutamiseks:`
+                : `${name}\\nPR: ${currentWeight}kg\\n\\nSisesta baseline (kg):`;
+            const input = prompt(msg, current !== undefined ? current : '');
+            if (input === null) return; // Cancel
+            if (input.trim() === '') {
+                setBaseline(name, null);
+            } else {
+                const val = parseFloat(input.trim().replace(',', '.'));
+                if (!isNaN(val) && val > 0) {
+                    setBaseline(name, val);
+                }
+            }
+            const allWorkouts = Object.values(workouts).flat();
+            updateProgress(allWorkouts);
+        }
+
+        function updateProgress(allWorkouts) {
+            const gymWorkouts = allWorkouts.filter(w => w.source === 'gymaholic');
+            const baselines = getBaselines();
+
+            // Leia iga harjutuse parim tulemus
+            const prs = {};
+            gymWorkouts.forEach(w => {
+                if (w.exercises) {
+                    w.exercises.forEach(ex => {
+                        const name = ex.name;
+                        const weight = ex.weight_kg || 0;
+                        const reps = ex.reps || 0;
+
+                        if (weight > 0 && !name.toLowerCase().includes('rowing') && !name.toLowerCase().includes('treadmill')) {
+                            if (!prs[name] || weight > prs[name].weight || (weight === prs[name].weight && reps > prs[name].reps)) {
+                                prs[name] = { weight, reps, sets: ex.sets || 0 };
+                            }
+                        }
+                    });
+                }
+            });
+
+            const progressGrid = document.getElementById('progressGrid');
+            progressGrid.innerHTML = '';
+
+            // Kõigepealt baseline'iga harjutused, siis ülejäänud
+            const sortedPrs = Object.entries(prs)
+                .sort((a, b) => {
+                    const aHas = baselines[a[0]] !== undefined ? 0 : 1;
+                    const bHas = baselines[b[0]] !== undefined ? 0 : 1;
+                    if (aHas !== bHas) return aHas - bHas;
+                    return b[1].weight - a[1].weight;
+                });
+
+            sortedPrs.forEach(([name, pr]) => {
+                const baseline = baselines[name];
+                const item = document.createElement('div');
+                item.className = 'progress-item';
+
+                let changeHtml = '<span class="baseline-hint">klõpsa baseline lisamiseks</span>';
+                if (baseline !== undefined) {
+                    const diff = pr.weight - baseline;
+                    const pct = ((diff / baseline) * 100).toFixed(0);
+                    const changeClass = diff > 0 ? 'positive' : '';
+                    changeHtml = `<span class="${changeClass}">Baseline: ${baseline}kg → ${diff > 0 ? '+' : ''}${diff}kg (${diff > 0 ? '+' : ''}${pct}%)</span>`;
+                }
+
+                item.innerHTML = `
+                    <div class="exercise-name" onclick="editBaseline('${name.replace(/'/g, "\\\\'")}', ${pr.weight})">${name}</div>
+                    <div class="progress-value">${pr.sets}×${pr.reps} @ ${pr.weight}kg</div>
+                    <div class="progress-change">${changeHtml}</div>
+                `;
+                progressGrid.appendChild(item);
+            });
+
+            // Genereeri soovitused
+            generateRecommendations(gymWorkouts, allWorkouts);
+        }
+
+        function generateRecommendations(gymWorkouts, allWorkouts) {
+            const recommendations = document.getElementById('recommendations');
+
+            // Filtreeri valitud kuu treeningud
+            const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+            const recentGym = gymWorkouts.filter(w => {
+                const date = (w.timestamp || w.date || '').substring(0, 7);
+                return date === monthPrefix;
+            });
+
+            const recentCardio = allWorkouts.filter(w => {
+                const date = (w.timestamp || w.date || '').substring(0, 7);
+                return w.source === 'workoutdoor' && date === monthPrefix;
+            });
+
+            let tips = '<h4>💡 Soovitused</h4>';
+
+            const monthLabel = monthNames[currentMonth];
+
+            // Treeningute sagedus
+            if (recentGym.length === 0) {
+                tips += '<p>⚠️ ' + monthLabel + ' — jõutreeninguid pole veel.</p>';
+            } else if (recentGym.length < 6) {
+                tips += '<p>✅ ' + monthLabel + ' — ' + recentGym.length + ' jõutreeningut.</p>';
+            } else {
+                tips += '<p>🔥 ' + monthLabel + ' — ' + recentGym.length + ' jõutreeningut. Tugev kuu!</p>';
+            }
+
+            // Kardio
+            if (recentCardio.length === 0) {
+                tips += '<p>💙 ' + monthLabel + ' — kardiot pole. Lisa kõnd, rattasõit või ujumine!</p>';
+            } else {
+                tips += '<p>💙 ' + monthLabel + ' — ' + recentCardio.length + ' kardio treeningut.</p>';
+            }
+
+            // Topeltprogressioon meeldetuletus
+            tips += '<p>📊 <strong>Topeltprogressioon:</strong> Iga treening +1 kordus. Kui jõuad vahemiku ülemisse piiri, tõsta raskust 2.5-5kg ja alusta uuesti alumisest piirist.</p>';
+
+            recommendations.innerHTML = tips;
+        }
+
+        // ===================================
+        // EXERCISE PROGRESS FUNCTIONALITY
+        // ===================================
+
+        let exerciseProgressChart = null;
+
+        function initializeExerciseProgress() {
+            const allWorkouts = Object.values(workouts).flat();
+            const gymWorkouts = allWorkouts.filter(w => w.source === 'gymaholic');
+
+            // Kogume kõik unikaalsed harjutused
+            const exercises = new Set();
+            gymWorkouts.forEach(w => {
+                if (w.exercises) {
+                    w.exercises.forEach(ex => {
+                        const name = ex.name;
+                        // Väldi soojendusi ja lõpetusi
+                        if (!name.toLowerCase().includes('rowing') &&
+                            !name.toLowerCase().includes('treadmill') &&
+                            ex.weight_kg > 0) {
+                            exercises.add(name);
+                        }
+                    });
+                }
+            });
+
+            // Täida dropdown
+            const select = document.getElementById('exerciseSelect');
+            const sortedExercises = Array.from(exercises).sort();
+
+            sortedExercises.forEach(exercise => {
+                const option = document.createElement('option');
+                option.value = exercise;
+                option.textContent = exercise;
+                select.appendChild(option);
+            });
+        }
+
+        function showExerciseProgress() {
+            const selectedExercise = document.getElementById('exerciseSelect').value;
+            const container = document.getElementById('exerciseStatsContainer');
+
+            if (!selectedExercise) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+
+            // Kogume selle harjutuse andmed
+            const allWorkouts = Object.values(workouts).flat();
+            const gymWorkouts = allWorkouts.filter(w => w.source === 'gymaholic');
+
+            const exerciseData = [];
+            gymWorkouts.forEach(w => {
+                if (w.exercises) {
+                    w.exercises.forEach(ex => {
+                        if (ex.name === selectedExercise && ex.weight_kg > 0) {
+                            exerciseData.push({
+                                date: w.timestamp || w.date,
+                                weight: ex.weight_kg,
+                                reps: ex.reps,
+                                sets: ex.sets,
+                                volume: ex.total_volume || 0
+                            });
+                        }
+                    });
+                }
+            });
+
+            // Sorteeri kuupäeva järgi
+            exerciseData.sort((a, b) => a.date.localeCompare(b.date));
+
+            if (exerciseData.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            // Arvuta statistika
+            const currentData = exerciseData[exerciseData.length - 1];
+            const firstData = exerciseData[0];
+            const prWeight = Math.max(...exerciseData.map(d => d.weight));
+            const prReps = Math.max(...exerciseData.filter(d => d.weight === prWeight).map(d => d.reps));
+
+            const weightProgress = currentData.weight - firstData.weight;
+            const repsProgress = currentData.reps - firstData.reps;
+
+            // Baseline kaalud
+            const baselines = {
+                'Barbell Bench Press': 60,
+                'Bent Over Barbell Row': 55,
+                'Romanian Deadlift': 50,
+                'Barbell Squat': 55,
+                'Barbell Curl': 30
+            };
+            const baseline = baselines[selectedExercise];
+
+            // Näita statistikat
+            const statsHTML = `
+                <div class="exercise-stat-card">
+                    <div class="exercise-stat-label">Praegune</div>
+                    <div class="exercise-stat-value">${currentData.sets}×${currentData.reps} @ ${currentData.weight}kg</div>
+                </div>
+                <div class="exercise-stat-card">
+                    <div class="exercise-stat-label">Personal Record</div>
+                    <div class="exercise-stat-value">${prWeight}kg × ${prReps}</div>
+                </div>
+                <div class="exercise-stat-card">
+                    <div class="exercise-stat-label">Progress (kaal)</div>
+                    <div class="exercise-stat-value ${weightProgress > 0 ? 'positive' : ''}">${weightProgress > 0 ? '+' : ''}${weightProgress}kg</div>
+                    <div class="exercise-stat-change ${weightProgress > 0 ? 'positive' : ''}">
+                        ${((weightProgress / firstData.weight) * 100).toFixed(0)}%
+                    </div>
+                </div>
+                ${baseline ? `
+                <div class="exercise-stat-card">
+                    <div class="exercise-stat-label">vs Baseline</div>
+                    <div class="exercise-stat-value">${baseline}kg → ${currentData.weight}kg</div>
+                    <div class="exercise-stat-change positive">+${currentData.weight - baseline}kg</div>
+                </div>
+                ` : ''}
+                <div class="exercise-stat-card">
+                    <div class="exercise-stat-label">Treeninguid</div>
+                    <div class="exercise-stat-value">${exerciseData.length}</div>
+                </div>
+            `;
+
+            document.getElementById('exerciseStats').innerHTML = statsHTML;
+
+            // Joonista graafik
+            drawProgressChart(exerciseData, selectedExercise, baseline);
+        }
+
+        function drawProgressChart(data, exerciseName, baseline) {
+            const ctx = document.getElementById('progressChart');
+
+            // Hävita vana graafik
+            if (exerciseProgressChart) {
+                exerciseProgressChart.destroy();
+            }
+
+            // Vorminda kuupäevad
+            const labels = data.map(d => {
+                const date = new Date(d.date);
+                return date.toLocaleDateString('et-EE', { day: '2-digit', month: '2-digit' });
+            });
+
+            // Andmed
+            const weights = data.map(d => d.weight);
+            const reps = data.map(d => d.reps);
+
+            const datasets = [
+                {
+                    label: 'Kaal (kg)',
+                    data: weights,
+                    borderColor: '#4CAF50',
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                    yAxisID: 'y',
+                    tension: 0.3,
+                    fill: true
+                },
+                {
+                    label: 'Kordused',
+                    data: reps,
+                    borderColor: '#2196F3',
+                    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                    yAxisID: 'y1',
+                    tension: 0.3,
+                    fill: true
+                }
+            ];
+
+            // Lisa baseline joon kui on
+            if (baseline) {
+                datasets.push({
+                    label: 'Baseline',
+                    data: Array(data.length).fill(baseline),
+                    borderColor: '#FF9800',
+                    borderDash: [5, 5],
+                    borderWidth: 2,
+                    yAxisID: 'y',
+                    pointRadius: 0
+                });
+            }
+
+            exerciseProgressChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: exerciseName + ' - Progress',
+                            color: '#fff',
+                            font: { size: 16 }
+                        },
+                        legend: {
+                            labels: { color: '#fff' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#999' },
+                            grid: { color: '#3a3a3a' }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Kaal (kg)',
+                                color: '#4CAF50'
+                            },
+                            ticks: { color: '#4CAF50' },
+                            grid: { color: '#3a3a3a' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Kordused',
+                                color: '#2196F3'
+                            },
+                            ticks: { color: '#2196F3' },
+                            grid: { drawOnChartArea: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize
+        initializeExerciseProgress();
+        renderCalendar();
+    </script>
+</body>
+</html>"""
+
+    return html
+
+def main():
+    workouts = load_data()
+    html = generate_html(workouts)
+
+    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+        f.write(html)
+
+    print(f"✅ Kalender genereeritud: {OUTPUT_FILE}")
+    print(f"📊 Kokku: {len(workouts)} treeningut")
+    print(f"📄 Suurus: {OUTPUT_FILE.stat().st_size / 1024:.1f} KB")
+
+    # Upload to Google Drive (Claude Projects kaust)
+    try:
+        import subprocess
+        import os
+        gdrive_folder = os.getenv('GDRIVE_CLAUDE_FOLDER', '_trenn_output')
+
+        # Loo kaust kui ei eksisteeri
+        subprocess.run(['rclone', 'mkdir', f'gdrive:{gdrive_folder}'],
+                      capture_output=True, check=False)
+
+        # Kopeeri fail
+        result = subprocess.run(
+            ['rclone', 'copy', str(OUTPUT_FILE), f'gdrive:{gdrive_folder}/'],
+            capture_output=True, text=True, timeout=30
+        )
+
+        if result.returncode == 0:
+            print(f"📤 Üles laaditud: gdrive:{gdrive_folder}/calendar.html")
+        else:
+            print(f"⚠️  Google Drive upload ebaõnnestus: {result.stderr}")
+    except Exception as e:
+        print(f"⚠️  Google Drive upload ebaõnnestus: {e}")
+
+    # Push to GitHub Pages
+    try:
+        import shutil
+        from pathlib import Path
+
+        script_dir = Path(__file__).parent
+
+        # Kopeeri calendar.html → index.html (GitHub Pages vajab index.html)
+        shutil.copy(script_dir / 'calendar.html', script_dir / 'index.html')
+
+        # Git add, commit, push
+        subprocess.run(['git', 'add', 'index.html'], cwd=script_dir, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'Update calendar'], cwd=script_dir, capture_output=True)
+        result = subprocess.run(['git', 'push'], cwd=script_dir, capture_output=True, text=True, timeout=30)
+
+        if result.returncode == 0:
+            print(f"🐙 GitHub Pages uuendatud: https://aimarraid-netizen.github.io/trenn-d8b4c9a1/")
+        else:
+            print(f"⚠️  GitHub push ebaõnnestus: {result.stderr}")
+    except Exception as e:
+        print(f"⚠️  GitHub push ebaõnnestus: {e}")
+
+if __name__ == '__main__':
+    main()

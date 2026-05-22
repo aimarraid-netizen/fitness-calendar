@@ -1,0 +1,90 @@
+{
+  "strategy": "double_progression",
+  "description": "Topeltprogressioon - tõsta korduste arvu iga treeninguga vahemiku piires, kui saavutad maksimumi, tõsta raskust ja alusta uuesti miinimumist",
+  "exercises": {
+    "Barbell Bench Press": {
+      "sets": 3,
+      "reps": "6-8"
+    },
+    "Barbell Curl": {
+      "sets": 3,
+      "reps": "8-12"
+    },
+    "Barbell Squat": {
+      "sets": 3,
+      "reps": "6-10"
+    },
+    "Bent Over Barbell Row": {
+      "sets": 3,
+      "reps": "6-10"
+    },
+    "Face Pull": {
+      "sets": 3,
+      "reps": "20"
+    },
+    "Incline Dumbbell Press": {
+      "sets": 3,
+      "reps": "10-12"
+    },
+    "Lunge": {
+      "sets": 3,
+      "reps": "8-12"
+    },
+    "Lying Leg Raise": {
+      "sets": 3,
+      "reps": "max"
+    },
+    "Lying Triceps Press": {
+      "sets": 3,
+      "reps": "10-12"
+    },
+    "One-Arm Dumbbell Row": {
+      "sets": 3,
+      "reps": "6-10"
+    },
+    "Plank": {
+      "sets": 3,
+      "reps": "max"
+    },
+    "Romanian Deadlift": {
+      "sets": 3,
+      "reps": "10-12"
+    },
+    "Seated Cable Rows": {
+      "sets": 3,
+      "reps": "10-12"
+    },
+    "Seated Hammer Curls": {
+      "sets": 3,
+      "reps": "10-12"
+    },
+    "Seated Triceps Press": {
+      "sets": 3,
+      "reps": "8-12"
+    },
+    "Side Lateral Raise": {
+      "sets": 3,
+      "reps": "12-15"
+    },
+    "Single-Leg Press": {
+      "sets": 3,
+      "reps": "10-15"
+    },
+    "Standing Calf Raise": {
+      "sets": 3,
+      "reps": "15-25"
+    },
+    "Triceps Dips": {
+      "sets": 3,
+      "reps": "6-10"
+    },
+    "Triceps Pushdown with Rope": {
+      "sets": 3,
+      "reps": "10-15"
+    },
+    "Wide-Grip Lat Pulldown": {
+      "sets": 3,
+      "reps": "8-12"
+    }
+  }
+}
