@@ -123,15 +123,15 @@ function spark(hist,key){
   return `<svg class="spark" viewBox="0 0 ${W} ${H}"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 
-function render(){
+function render(keepScroll){
   const app=document.getElementById("app");
   const back=document.getElementById("back");
-  app.className="wrap fade";
+  app.className=keepScroll?"wrap":"wrap fade";
   if(view.name==="cal"){back.style.display="none";renderCal(app);}
   else if(view.name==="workout"){back.style.display="block";renderWorkout(app);}
   else if(view.name==="exercise"){back.style.display="block";renderExercise(app);}
   else if(view.name==="exlist"){back.style.display="none";renderExList(app);}
-  window.scrollTo(0,0);
+  if(!keepScroll)window.scrollTo(0,0);
 }
 
 function setHeader(t,s){document.getElementById("title").textContent=t;document.getElementById("subtitle").textContent=s||"";}
@@ -186,7 +186,7 @@ function prCount(w){
   if((w.insight||"").includes("rekord"))return`<span class="chip accent">🏆 PR</span>`;
   return"";
 }
-function moveMonth(dir){view.calM+=dir;if(view.calM<0){view.calM=11;view.calY--}if(view.calM>11){view.calM=0;view.calY++}render();}
+function moveMonth(dir){const y=window.scrollY;view.calM+=dir;if(view.calM<0){view.calM=11;view.calY--}if(view.calM>11){view.calM=0;view.calY++}render(true);window.scrollTo(0,y);}
 function fmtDate(ds){const d=new Date(ds);return`${d.getDate()}. ${MONTHS[d.getMonth()].toLowerCase()}`;}
 
 // ===== WORKOUT =====
