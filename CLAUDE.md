@@ -2,62 +2,62 @@
 You are only allowed to work inside ~/projects/trenn/ (symlink: ~/trenn/).
 Do not read, touch or access anything outside of this directory.
 
-# Architecture
+# Trenn 2.0 — Arhitektuur (ümber tehtud 2026-05-22)
 
-Single pipeline orkestreeritud n8n-st. **Käivitusviis: Docker bind mount, MITTE SSH** — `/home/aimar/trenn` on n8n konteineris `/trenn`-na nähtav, niiet `Execute Command` node käivitab `/trenn/pipeline.sh` otse. Kui näed kuskil dokumentatsioonis "n8n → SSH → pipeline.sh", siis see on aegunud.
+**Vana n8n + rclone + Google Drive pipeline on PENSIONIL.** Uus süsteem on SQLite-põhine, Kratt orkestreerib otse Telegramist.
 
+## Andmevoog
 ```
-n8n Schedule Trigger (iga 15 min)
-  → Execute Command: /trenn/pipeline.sh
-    → flock-protected (üks instants korraga)
-    → rclone sync Google Drive _trenn_input/ → data/incoming/
-    → routing failipikenduse järgi:
-        gym_*.zip  → restore_gymaholic.py → data/workout_history.json
-        *.fit      → convert_fit.py       → data/processed/csv/
-        *.gpx      → convert_gpx.py       → data/processed/gpx/
-    → prepare_claude_project.py → fitness_knowledge.md → rclone → Google Drive _trenn_output/
-    → generate_calendar.py → calendar.html → git push (GitHub Pages)
+Trenni järel: jaga Gymaholicu ÜKSIK-TRENNI CSV otse Telegrami Kratile
+  → v2/parse_gymaholic_csv.py  (parse + valideeri)
+  → data/trenn.db              (SQLite, üks tõeallikas)
+  → v2/render_html.py          (mobile-first HTML)
+  → git push                   (GitHub Pages)
+
+Kardio: FIT-fail → v2/parse_fit.py (TODO, vana convert_fit.py loogika)
+
+Lives trenni ajal (Kratt Telegramis):
+  → v2/kratt_tools.py last/history   ("mis oli eelmine bench?")
+  → v2/kratt_tools.py equip/note     ("Face Pull täna masin")
 ```
 
-## Andmestruktuur
+## v2/ moodulid
+- `db.py` — SQLite skeem + ühendus. **NULL-kaal ≠ 0kg** (TRX/kehakaal/puuduv)
+- `exercise_config.py` — vaikevarustus, lihasgrupp iga harjutuse kohta
+- `migrate.py` — vana JSON → SQLite (juba jooksnud, 37 trenni)
+- `parse_gymaholic_csv.py` — üksik-trenni CSV parser (`;`-eraldatud, kaal kilodes, rep-vahemikud inline)
+- `queries.py` — taaskasutatav päringukiht
+- `analyze.py` — **progressioon-teadlik** analüüs (kaal↑+kordused↓=areng; varustusvahetus=neutraalne)
+- `render_html.py` + `template.html` — HTML generaator (Chart.js, drill-down)
+- `kratt_tools.py` — Kratti read/write CLI
 
-`data/` keskne kataloog:
-- `analyses.json` — peamine andmebaas (kõik workout'id, tagasi varundatud `.bak`, `.bak2`, `.pre-migration.bak` failidesse)
-- `personal_records.json` — rekordid harjutuste lõikes
-- `training_strategy.json` — strateegia parameetrid
-- `workout_history.json` — Gymaholic'ist taastatud sessioonid (dedup timestamp+name kombo järgi)
-- `incoming/` — rclone sync sihtkoht, töötlemise input
-- `processed/` — õnnestunult töödeldud failid
-- `failed/` — vead (uuri logs/-s põhjust enne ümber-mängimist)
-- `temp_import/` — vahelaad
+## Andmebaas (data/trenn.db)
+- `workouts` — sessioonid (UNIQUE timestamp+name = dedup)
+- `sets` — üksikseeriad. `weight_kg=NULL` = kaalu pole logitud (EI 0.0!)
+- `exercises` — vaikevarustus, rep-vahemikud, lihasgrupp
+- Rekordid arvutatakse päringuga (`queries.compute_prs`), EI salvestata eraldi
 
-`logs/processed_files.log` — SHA256 hash'id juba töödeldud failidest (deduplikatsiooniks). Pipeline ei taastöötle sama faili ka kui see uuesti `incoming/`-sse jõuab.
+## HTML väljund (mobile-first, drill-down)
+📅 Kalender + Kratti koondanalüüs → 🏋️ trenn (grupeeritud read) → 📈 harjutus (Chart.js graafik)
+- Grupeeritud seeriad: `3×6 · 70kg` (mitte 3 eraldi rida)
+- Nutikad delta-värvid: varustusvahetus = neutraalne (mitte punane)
+- `index.html` = `calendar.html` (alias), push GitHub Pages'i
 
-## Skriptid
+## Live URL
+https://aimarraid-netizen.github.io/trenn-d8b4c9a1/
 
-- `pipeline.sh` — ainus orkestreerija, `flock`-iga kaitstud (paralleelse jookse vältimiseks)
-- `convert_fit.py` — FIT → CSV, Karvonen HR zones (RHR, max HR `.env`-s)
-- `convert_gpx.py` — GPX → CSV. **Hoiatus:** varasem bug — kirjutas tühjad HR väljad mis lõhkusid kalendri ja knowledge generaatorid (sessioon `695a6945`). Kui muudad seda, kontrolli HR välju lõpuks
-- `restore_gymaholic.py` — Gymaholic ZIP → workout_history.json
-- `generate_calendar.py` — HTML kalender + rclone upload + git push (`index.html` ja `calendar.html` on identsed, viimane on alias)
-- `prepare_claude_project.py` — fitness_knowledge.md, rclone Google Drive'i
-- `analyze_workout.py` — analüüs ühe workout'i kohta
-- `save_analysis.py` — analüüsi kirjutamine andmebaasi
+## Põhiprobleemid mis lahendati
+1. **Võltsregress** — Face Pull TRX↔masin enam ei näita "regressi" (NULL-kaal loogika)
+2. **Topeltprogressioon** — kaal↑ + kordused↓ = areng, mitte "−4 kordust regress"
+3. **Üks tõeallikas** — rekordid baasist, mitte külmunud personal_records.json
+4. **Tekst ütleb mustreid** mida kasutaja ise ei näe, EI korda tabelinumbreid
 
-## Konfiguratsioon
-
-- `.env` — rclone token, GitHub PAT, max HR, RHR (vt `.env.example`)
-- `requirements.txt` — Python paketid (3 paketti, vaata faili)
-- `harjutuste_vahemikud.csv` — harjutuste rep range tabel
-
-## Output
-
-- `index.html` / `calendar.html` — push'itud GitHub Pages'i
-- `fitness_knowledge.md` — Claude Project'is kasutatav, Google Drive `_trenn_output/`-is
+## Vana süsteem (legacy, ära kasuta)
+`generate_calendar.py`, `restore_gymaholic.py`, `prepare_claude_project.py`, `pipeline.sh` jne.
+Plaan: arhiveerida `legacy/` alla. Backup vanadest andmetest: `backups/2026-05-22-pre-v2/`.
 
 ## Conventions
-
 - Vasta eesti keeles
-- Pipeline'i muudatused: testida käsitsi `bash pipeline.sh` käivitusega ENNE n8n workflow'sse jätmist
-- Kui debug'id miks pipeline ei tee õigesti — vaata kõigepealt `logs/` (see on suur, kasuta `tail -100`), siis n8n Execution UI'd
-- Enne pipeline.sh muudatusi mõtle: kas see jookseb iga 15 min — uus skript peab olema **idempotentne** (ei tee duplikaate, ei lõhu juba edukalt töödeldud andmeid)
+- Sisend = üksik-trenni CSV otse Telegrami (EI Google Drive)
+- Idempotentsus: sama fail 2× ei tee duplikaate (INSERT OR IGNORE + DELETE+reinsert seeriatele)
+- Enne suuri muudatusi: backup data/trenn.db
