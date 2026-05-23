@@ -52,12 +52,7 @@ header .sub{font-size:12px;color:var(--dim);font-weight:400}
 .cald.has.rattasõit{background:rgba(163,113,247,.18);border-color:rgba(163,113,247,.4)}
 .cald.has.ujumine{background:rgba(31,182,220,.18);border-color:rgba(31,182,220,.4)}
 .cald.has.kardio,.cald.has.jooksmine{background:rgba(248,81,73,.18);border-color:rgba(248,81,73,.4)}
-.cald .dot{width:5px;height:5px;border-radius:50%;margin-top:2px}
-.cald.has.selg .dot{background:var(--green)}.cald.has.rind .dot{background:var(--accent)}.cald.has.jalad .dot{background:var(--yellow)}
-.cald.has.kõndimine .dot,.cald.has.matk .dot{background:var(--blue)}
-.cald.has.rattasõit .dot{background:#a371f7}
-.cald.has.ujumine .dot{background:#1fb6dc}
-.cald.has.kardio .dot,.cald.has.jooksmine .dot{background:var(--red)}
+.cald .dot{font-size:9px;line-height:1;margin-top:1px}
 /* exercise rows */
 .exrow{display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;cursor:pointer}
 .exrow:active{background:var(--card2)}
@@ -117,6 +112,7 @@ function eq(e){return EQUIP[e]||e||"";}
 const CARDIO_TYPES=["kõndimine","rattasõit","ujumine","matk","jooksmine","kardio"];
 function isCardioType(t){return CARDIO_TYPES.includes(t);}
 function cardioIcon(t){return {kõndimine:"🚶",rattasõit:"🚴",ujumine:"🏊",matk:"🥾",jooksmine:"🏃",kardio:"❤️"}[t]||"🏃";}
+function workoutIcon(t){return {selg:"🔵",rind:"💪",jalad:"🦵",kõndimine:"🚶",rattasõit:"🚴",ujumine:"🏊",matk:"🥾",jooksmine:"🏃",kardio:"❤️"}[t]||"🏋️";}
 function fmtSet(g){
   if(g.duration!=null&&g.duration>0){
     return `${g.count}×${fmtDur(g.duration)}`;
@@ -186,10 +182,25 @@ function renderCal(app){
   for(let d=1;d<=days;d++){
     const ds=`${view.calY}-${String(view.calM+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
     const w=byDate[ds];
-    if(w)html+=`<div class="cald has ${w.type}" onclick="openWorkout(${w.id})">${d}<span class="dot"></span></div>`;
+    if(w)html+=`<div class="cald has ${w.type}" onclick="openWorkout(${w.id})">${d}<span class="dot">${workoutIcon(w.type)}</span></div>`;
     else html+=`<div class="cald">${d}</div>`;
   }
   html+=`</div></div>`;
+  // kuu kokkuvõte
+  const monthWs=DATA.workouts.filter(w=>{const d=new Date(w.date);return d.getFullYear()===view.calY&&d.getMonth()===view.calM;});
+  if(monthWs.length){
+    const counts={};
+    monthWs.forEach(w=>{counts[w.type]=(counts[w.type]||0)+1;});
+    html+=`<div class="card" style="padding:12px 16px"><div class="row" style="flex-wrap:wrap;gap:8px;justify-content:flex-start">`;
+    for(const[type,n]of Object.entries(counts)){
+      html+=`<div style="display:flex;align-items:center;gap:5px;font-size:14px">
+        <span>${workoutIcon(type)}</span>
+        <span style="font-weight:600">${n}×</span>
+        <span class="muted">${type}</span>
+      </div>`;
+    }
+    html+=`</div></div>`;
+  }
   // recent workouts list
   html+=`<div class="title" style="margin:18px 0 10px">Viimased trennid</div>`;
   DATA.workouts.slice(0,8).forEach(w=>{
