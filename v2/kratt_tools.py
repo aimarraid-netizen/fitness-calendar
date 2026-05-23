@@ -170,8 +170,15 @@ def import_fit(conn, fit_path):
     return "✓ FIT imporditud" if added else "↩ Juba olemas, vahele jäetud"
 
 
+def import_gpx(conn, gpx_path):
+    """Impordi GPX/XML-fail (kardio)."""
+    import parse_gpx as pg
+    added = pg.process_file(Path(gpx_path), conn, archive=True)
+    return "✓ GPX imporditud" if added else "↩ Juba olemas, vahele jäetud"
+
+
 def import_zip(conn, zip_path):
-    """Pakib ZIP lahti, impordib seest leitud .fit ja .csv failid."""
+    """Pakib ZIP lahti, impordib seest leitud .fit, .gpx ja .csv failid."""
     import zipfile, tempfile
     results = []
     with zipfile.ZipFile(zip_path) as zf:
@@ -179,11 +186,15 @@ def import_zip(conn, zip_path):
             zf.extractall(tmp)
             tmp = Path(tmp)
             fit_files = list(tmp.rglob("*.fit"))
+            gpx_files = list(tmp.rglob("*.gpx"))
+            xml_files = list(tmp.rglob("*.xml"))
             csv_files = list(tmp.rglob("*.csv"))
-            if not fit_files and not csv_files:
-                return "❌ ZIP-is ei leitud ühtegi .fit ega .csv faili"
+            if not any([fit_files, gpx_files, xml_files, csv_files]):
+                return "❌ ZIP-is ei leitud ühtegi .fit/.gpx/.xml/.csv faili"
             for fp in fit_files:
                 results.append(import_fit(conn, fp))
+            for fp in gpx_files + xml_files:
+                results.append(import_gpx(conn, fp))
             for fp in csv_files:
                 results.append(import_csv(conn, fp))
     return "\n".join(results)
@@ -222,6 +233,8 @@ if __name__ == "__main__":
             print(import_zip(conn, p))
         elif p.suffix.lower() == ".fit":
             print(import_fit(conn, p))
+        elif p.suffix.lower() in (".gpx", ".xml"):
+            print(import_gpx(conn, p))
         else:
             print(import_csv(conn, p))
         regen_html()
