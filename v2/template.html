@@ -112,7 +112,7 @@ function eq(e){return EQUIP[e]||e||"";}
 const CARDIO_TYPES=["kõndimine","rattasõit","ujumine","matk","jooksmine","kardio"];
 function isCardioType(t){return CARDIO_TYPES.includes(t);}
 function cardioIcon(t){return {kõndimine:"🚶",rattasõit:"🚴",ujumine:"🏊",matk:"🥾",jooksmine:"🏃",kardio:"❤️"}[t]||"🏃";}
-function workoutIcon(t){return {selg:"🔵",rind:"💪",jalad:"🦵",kõndimine:"🚶",rattasõit:"🚴",ujumine:"🏊",matk:"🥾",jooksmine:"🏃",kardio:"❤️"}[t]||"🏋️";}
+function workoutIcon(t){return {jõusaal:"🏋️",kõndimine:"🚶",rattasõit:"🚴",ujumine:"🏊",matk:"🥾",jooksmine:"🏃",kardio:"❤️"}[t]||"🏋️";}
 function fmtSet(g){
   if(g.duration!=null&&g.duration>0){
     return `${g.count}×${fmtDur(g.duration)}`;
@@ -190,7 +190,10 @@ function renderCal(app){
   const monthWs=DATA.workouts.filter(w=>{const d=new Date(w.date);return d.getFullYear()===view.calY&&d.getMonth()===view.calM;});
   if(monthWs.length){
     const counts={};
-    monthWs.forEach(w=>{counts[w.type]=(counts[w.type]||0)+1;});
+    monthWs.forEach(w=>{
+      const type=isCardioType(w.type)?w.type:"jõusaal";
+      counts[type]=(counts[type]||0)+1;
+    });
     html+=`<div class="card" style="padding:12px 16px"><div class="row" style="flex-wrap:wrap;gap:8px;justify-content:flex-start">`;
     for(const[type,n]of Object.entries(counts)){
       html+=`<div style="display:flex;align-items:center;gap:5px;font-size:14px">
