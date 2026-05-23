@@ -163,6 +163,32 @@ def import_csv(conn, csv_path):
     return f"✓ Imporditud: {date} {name} (id={wid})"
 
 
+def import_fit(conn, fit_path):
+    """Impordi FIT-fail (kardio) ja regenereeri HTML."""
+    import parse_fit as pf
+    added = pf.process_file(Path(fit_path), conn, archive=True)
+    return "✓ FIT imporditud" if added else "↩ Juba olemas, vahele jäetud"
+
+
+def import_zip(conn, zip_path):
+    """Pakib ZIP lahti, impordib seest leitud .fit ja .csv failid."""
+    import zipfile, tempfile
+    results = []
+    with zipfile.ZipFile(zip_path) as zf:
+        with tempfile.TemporaryDirectory() as tmp:
+            zf.extractall(tmp)
+            tmp = Path(tmp)
+            fit_files = list(tmp.rglob("*.fit"))
+            csv_files = list(tmp.rglob("*.csv"))
+            if not fit_files and not csv_files:
+                return "❌ ZIP-is ei leitud ühtegi .fit ega .csv faili"
+            for fp in fit_files:
+                results.append(import_fit(conn, fp))
+            for fp in csv_files:
+                results.append(import_csv(conn, fp))
+    return "\n".join(results)
+
+
 def regen_html():
     import render_html
     render_html.main()
@@ -191,7 +217,13 @@ if __name__ == "__main__":
         sets = int(sys.argv[5]) if len(sys.argv) > 5 else None
         print(set_duration(conn, sys.argv[2], secs, date, sets))
     elif cmd == "import":
-        print(import_csv(conn, sys.argv[2]))
+        p = Path(sys.argv[2])
+        if p.suffix.lower() == ".zip":
+            print(import_zip(conn, p))
+        elif p.suffix.lower() == ".fit":
+            print(import_fit(conn, p))
+        else:
+            print(import_csv(conn, p))
         regen_html()
     else:
         print(__doc__)
