@@ -70,6 +70,7 @@ def build_payload(conn):
             "duration": w["duration_min"],
             "volume": round(w["total_volume"] or 0),
             "distance_km": round(w["distance_m"] / 1000, 1) if w.get("distance_m") else None,
+            "avg_speed_kmh": round((w["distance_m"] / 1000) / (w["duration_min"] / 60), 1) if w.get("distance_m") and w.get("duration_min") and w["duration_min"] > 0 else None,
             "avg_hr": w["avg_hr"],
             "kcal": w["kcal"],
             "exercises": exercises,

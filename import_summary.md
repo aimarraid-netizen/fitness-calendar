@@ -1,11 +1,11 @@
-# Import 21.05.2026 20:31
+# Import 23.05.2026 17:01
 
 ## Töödeldud failid
 
-### Gymaholic ZIP (1)
-- gym_801077361.568738.zip
+### Workoutdoor FIT (1)
+- Saturday Morning Hike.fit
 
 ## Väljundid
 
 - **fitness_knowledge.md** — 37 treeningut, 48K
-- **calendar.html** — 183K
+- **calendar.html** — 185K

@@ -239,6 +239,7 @@ function renderWorkout(app){
     html+=`<div class="row" style="justify-content:space-around;text-align:center">`;
     if(w.distance_km)html+=`<div><div class="big">${w.distance_km}</div><div class="muted">km</div></div>`;
     html+=`<div><div class="big">${w.duration||"?"}</div><div class="muted">min</div></div>`;
+    if(w.avg_speed_kmh)html+=`<div><div class="big">${w.avg_speed_kmh}</div><div class="muted">km/h</div></div>`;
     if(w.avg_hr)html+=`<div><div class="big">${w.avg_hr}</div><div class="muted">⌀ bpm</div></div>`;
     if(w.kcal)html+=`<div><div class="big">${w.kcal}</div><div class="muted">kcal</div></div>`;
     html+=`</div></div>`;
