@@ -64,14 +64,23 @@ def _parse_duration(raw):
 
 
 def _workout_type(name):
-    n = name.lower()
+    n = (name or "").lower()
     if "jalad" in n or "kõht" in n:
         return "jalad"
     if "rind" in n or "õlg" in n or "triitseps" in n:
         return "rind"
     if "selg" in n or "biitseps" in n:
         return "selg"
-    return "strength"
+    # Uue kava nimed: Trenn A = jalad+rind+selg → täistrenn → jõusaal
+    # Trenn B = selg-fookus, Trenn C = kodu
+    if "trenn a" in n or "workout a" in n:
+        return "jalad"   # A = squat päev = jalad dominant
+    if "trenn b" in n or "workout b" in n:
+        return "selg"    # B = RDL/row päev = selg dominant
+    if "trenn c" in n or "workout c" in n:
+        return "kodune"  # C = kodune
+    # üldine jõutrenn, ei tea lihasgruppi täpselt
+    return "jõusaal"
 
 
 def parse_csv(path):
