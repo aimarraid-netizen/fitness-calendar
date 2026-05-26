@@ -120,8 +120,8 @@ let chartRef=null;
 function eq(e){return EQUIP[e]||e||"";}
 const CARDIO_TYPES=["kõndimine","rattasõit","ujumine","matk","jooksmine","kardio"];
 function isCardioType(t){return CARDIO_TYPES.includes(t);}
-// IKONIDE VALIK: muuda ainult seda ühte rida ("A" | "B" | "C")
-const ICON_SET = "A";
+// IKONIDE VALIK: muuda ainult seda ühte rida ("A" | "B" | "C" | "D")
+const ICON_SET = "D";
 const ICONS = {
   A: { // custom lihtne + puhas
     jõusaal:"🏋️", kodune:"🏠", kõndimine:"🚶", rattasõit:"🚴", ujumine:"🏊", matk:"🥾", jooksmine:"🏃", kardio:"❤️"
@@ -129,8 +129,11 @@ const ICONS = {
   B: { // neutraalne klassika
     jõusaal:"💪", kodune:"🏡", kõndimine:"🚶", rattasõit:"🚲", ujumine:"🏊", matk:"🌲", jooksmine:"🏃", kardio:"🫀"
   },
-  C: { // minimalistlik
+  C: { // minimalistlik sümbolistiil
     jõusaal:"◆", kodune:"⌂", kõndimine:"•", rattasõit:"◌", ujumine:"≈", matk:"▴", jooksmine:"▸", kardio:"♥"
+  },
+  D: { // minimalistlik + selge (soovitud)
+    jõusaal:"⌁", kodune:"⌂", kõndimine:"🚶", rattasõit:"🚲", ujumine:"≈", matk:"🌲", jooksmine:"▸", kardio:"♥"
   }
 };
 function iconFor(type){
