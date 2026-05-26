@@ -7,6 +7,7 @@ data/temp_import/
 data/failed/
 data/processed/
 data/*.bak
+data/*.bak-*
 data/*.bak2
 data/*.pre-migration.bak
 logs/
