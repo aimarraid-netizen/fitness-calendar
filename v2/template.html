@@ -122,9 +122,9 @@ const CARDIO_TYPES=["kõndimine","rattasõit","ujumine","matk","jooksmine","kard
 function isCardioType(t){return CARDIO_TYPES.includes(t);}
 function cardioIcon(t){return {kõndimine:"🚶",rattasõit:"🚴",ujumine:"🏊",matk:"🌲",jooksmine:"🏃",kardio:"❤️"}[t]||"🏃";}
 function workoutIcon(t){
-  if(t==="selg"||t==="rind"||t==="jalad"||t==="jõusaal")return"💪";
+  if(t==="selg"||t==="rind"||t==="jalad"||t==="jõusaal")return"🏋️";
   if(t==="kodune")return"🏠";
-  return {kõndimine:"🚶",rattasõit:"🚴",ujumine:"🏊",matk:"🌲",jooksmine:"🏃",kardio:"❤️"}[t]||"💪";
+  return {kõndimine:"🚶",rattasõit:"🚴",ujumine:"🏊",matk:"🌲",jooksmine:"🏃",kardio:"❤️"}[t]||"🏋️";
 }
 function fmtSet(g){
   if(g.duration!=null&&g.duration>0){
