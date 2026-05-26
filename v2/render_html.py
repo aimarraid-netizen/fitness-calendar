@@ -179,6 +179,7 @@ def main():
     payload = build_payload(conn)
     template = TEMPLATE.read_text(encoding="utf-8")
     html = template.replace("/*__DATA__*/", json.dumps(payload, ensure_ascii=False))
+    html = html.replace("{{ generated }}", payload["generated"])
     OUT.write_text(html, encoding="utf-8")
     # calendar.html = alias
     (OUT.parent / "calendar.html").write_text(html, encoding="utf-8")
