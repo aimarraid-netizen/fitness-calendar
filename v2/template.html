@@ -282,12 +282,17 @@ function exDelta(name){
   const h=ex.history,last=h[h.length-1],prev=h[h.length-2];
   if(last.equipment!==prev.equipment)return` <span class="delta d-neutral">↔ vahetus</span>`;
   if(last.weight!=null&&prev.weight!=null){
+    // Kaalutõus: näita ainult kaal (roheline). Korduste langus = planeeritud, EI punane.
     if(last.weight>prev.weight)return` <span class="delta d-up">▲ +${(last.weight-prev.weight).toFixed(1)}kg</span>`;
     if(last.weight<prev.weight)return` <span class="delta d-dn">▼ ${(last.weight-prev.weight).toFixed(1)}kg</span>`;
-  }
-  if(last.reps!=null&&prev.reps!=null){
-    if(last.reps>prev.reps)return` <span class="delta d-up">▲ +${last.reps-prev.reps}</span>`;
-    if(last.reps<prev.reps)return` <span class="delta d-dn">▼ ${last.reps-prev.reps}</span>`;
+    // Sama kaal: vaata kordusi
+    if(last.reps!=null&&prev.reps!=null){
+      if(last.reps>prev.reps)return` <span class="delta d-up">▲ +${last.reps-prev.reps} kord</span>`;
+      if(last.reps<prev.reps)return` <span class="delta d-dn">▼ ${last.reps-prev.reps} kord</span>`;
+    }
+  }else if(last.reps!=null&&prev.reps!=null){
+    if(last.reps>prev.reps)return` <span class="delta d-up">▲ +${last.reps-prev.reps} kord</span>`;
+    if(last.reps<prev.reps)return` <span class="delta d-dn">▼ ${last.reps-prev.reps} kord</span>`;
   }
   return` <span class="delta d-neutral">=</span>`;
 }
@@ -303,14 +308,6 @@ function renderExercise(app){
     ${ex.weeks_stuck&&st==="seisab"?`<span class="muted" style="margin-left:8px">~${ex.weeks_stuck} näd</span>`:""}</div>
     ${ex.pr?`<div style="text-align:right"><div class="muted">rekord</div><div class="title">${prText(ex)}</div></div>`:""}
   </div></div>`;
-  // chart toggle (aja-põhisel harjutusel "Aeg" asemel)
-  if(ex.is_time){
-    html+=`<div class="seg"><button class="on" onclick="setChart('duration',this)">Aeg</button></div>`;
-  }else{
-    html+=`<div class="seg"><button class="on" onclick="setChart('weight',this)">Kaal</button>
-      <button onclick="setChart('reps',this)">Kordused</button>
-      <button onclick="setChart('volume',this)">Maht</button></div>`;
-  }
   html+=`<div class="card"><div class="chart-box"><canvas id="exchart"></canvas></div></div>`;
   // history list
   html+=`<div class="title" style="margin:16px 0 10px">Ajalugu</div><div class="card">`;
@@ -323,15 +320,7 @@ function renderExercise(app){
   });
   html+=`</div>`;
   app.innerHTML=html;
-  // vaikegraafik: aja-põhine -> duration; kaaluandmeid napib -> kordused
-  let defKey="weight";
-  if(ex.is_time)defKey="duration";
-  else{
-    const wpts=ex.history.filter(h=>h.weight!=null).length;
-    defKey=wpts>=2?"weight":"reps";
-    if(defKey!=="weight")document.querySelectorAll(".seg button").forEach((b,i)=>b.classList.toggle("on",i===1));
-  }
-  drawChart(defKey);
+  drawChart();
 }
 function prText(ex){
   const p=ex.pr;
@@ -346,22 +335,101 @@ function setChart(key,btn){
   document.querySelectorAll(".seg button").forEach(b=>b.classList.remove("on"));
   btn.classList.add("on");drawChart(key);
 }
-function drawChart(key){
-  curChartKey=key;
+function drawChart(){
   const ex=DATA.exercises[view.ex];
   const h=ex.history;
-  const labels=h.map(x=>fmtDate(x.date));
-  const data=h.map(x=>key==="weight"?x.weight:key==="reps"?x.reps:key==="duration"?(x.duration!=null?Math.round(x.duration/60*10)/10:null):x.volume);
   if(chartRef)chartRef.destroy();
   const ctx=document.getElementById("exchart");
-  const lbl=key==="weight"?"Kaal (kg)":key==="reps"?"Kordused":key==="duration"?"Kestus (min)":"Maht (kg)";
-  chartRef=new Chart(ctx,{type:"line",data:{labels,datasets:[{label:lbl,data,
-    borderColor:"#2f81f7",backgroundColor:"rgba(47,129,247,.12)",fill:true,tension:.3,
-    pointRadius:4,pointBackgroundColor:"#2f81f7",spanGaps:true}]},
+  if(!ctx)return;
+  const labels=h.map(x=>fmtDate(x.date));
+
+  // Aja-põhine harjutus (Plank jne): ainult kestus
+  if(ex.is_time){
+    const data=h.map(x=>x.duration!=null?Math.round(x.duration/60*10)/10:null);
+    chartRef=new Chart(ctx,{type:"line",data:{labels,datasets:[{label:"Kestus (min)",data,
+      borderColor:"#2f81f7",backgroundColor:"rgba(47,129,247,.12)",fill:true,tension:.3,
+      pointRadius:4,pointBackgroundColor:"#2f81f7",spanGaps:true}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`Kestus: ${c.parsed.y??'–'} min`}}},
+        scales:{x:{grid:{color:"#262d3a"},ticks:{color:"#8b949e",maxRotation:0,autoSkip:true,maxTicksLimit:6}},
+                y:{grid:{color:"#262d3a"},ticks:{color:"#8b949e"}}}}});
+    return;
+  }
+
+  // Kaaluga harjutus: topelttelg — kaal vasakul (sinine), kordused paremal (roheline)
+  // Punktide värvid: plaanipärane korduste langus pärast kaalutõusu = oranž (mitte punane)
+  const wData=h.map(x=>x.weight);
+  const rData=h.map(x=>x.reps);
+
+  // Arvuta iga punkti värv
+  function ptColors(data,key){
+    return data.map((v,i)=>{
+      if(v==null||i===0)return"#8b949e";
+      const prev=data[i-1];
+      if(prev==null)return"#8b949e";
+      if(key==="weight"){
+        if(v>prev)return"#3fb950"; // kaalutõus = roheline
+        if(v<prev)return"#f85149"; // kaalu langus = punane (tõeline regress)
+        return"#8b949e";
+      }else{ // reps
+        const pw=wData[i-1],cw=wData[i];
+        const weightRose=(cw!=null&&pw!=null&&cw>pw);
+        if(v>prev)return"#3fb950"; // korduste tõus = roheline
+        if(v<prev)return weightRose?"#d29922":"#f85149"; // pärast kaalutõusu = oranž (plaanipärane); muidu punane
+        return"#8b949e";
+      }
+    });
+  }
+
+  const wColors=ptColors(wData,"weight");
+  const rColors=ptColors(rData,"reps");
+
+  const datasets=[];
+  const hasWeight=wData.some(v=>v!=null);
+  const hasReps=rData.some(v=>v!=null);
+
+  if(hasWeight){
+    datasets.push({
+      label:"Kaal (kg)", data:wData, yAxisID:"yW",
+      borderColor:"#2f81f7", backgroundColor:"rgba(47,129,247,.0)",
+      tension:.3, pointRadius:5, pointBackgroundColor:wColors,
+      pointBorderColor:wColors, spanGaps:true, order:1
+    });
+  }
+  if(hasReps){
+    datasets.push({
+      label:"Kordused", data:rData, yAxisID:"yR",
+      borderColor:"#3fb950", backgroundColor:"rgba(63,185,80,.0)",
+      tension:.3, pointRadius:5, pointBackgroundColor:rColors,
+      pointBorderColor:rColors, spanGaps:true, borderDash:[4,3], order:2
+    });
+  }
+
+  const scales={
+    x:{grid:{color:"#262d3a"},ticks:{color:"#8b949e",maxRotation:0,autoSkip:true,maxTicksLimit:6}}
+  };
+  if(hasWeight){
+    scales.yW={position:"left",grid:{color:"#262d3a"},ticks:{color:"#2f81f7"},
+      title:{display:true,text:"kg",color:"#2f81f7",font:{size:11}}};
+  }
+  if(hasReps){
+    scales.yR={position:"right",grid:{drawOnChartArea:!hasWeight,color:"#262d3a"},
+      ticks:{color:"#3fb950"},
+      title:{display:true,text:"kordused",color:"#3fb950",font:{size:11}}};
+  }
+
+  chartRef=new Chart(ctx,{type:"line",data:{labels,datasets},
     options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${lbl}: ${c.parsed.y??"–"}`}}},
-      scales:{x:{grid:{color:"#262d3a"},ticks:{color:"#8b949e",maxRotation:0,autoSkip:true,maxTicksLimit:6}},
-              y:{grid:{color:"#262d3a"},ticks:{color:"#8b949e"}}}}});
+      plugins:{
+        legend:{display:hasWeight&&hasReps,labels:{color:"#8b949e",boxWidth:12,font:{size:11}}},
+        tooltip:{callbacks:{
+          label:c=>{
+            if(c.dataset.label==="Kaal (kg)")return`Kaal: ${c.parsed.y??'–'} kg`;
+            return`Kordused: ${c.parsed.y??'–'}`;
+          }
+        }}
+      },
+      scales}});
 }
 
 // ===== EXERCISE LIST =====
