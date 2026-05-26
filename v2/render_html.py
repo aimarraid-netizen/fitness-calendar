@@ -159,7 +159,7 @@ def build_payload(conn):
     krat_notes.append(f"🟢 Arengus {len(growing)} harjutust {len(statuses)}-st.")
 
     return {
-        "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "generated": datetime.now().strftime("%d.%m.%Y %H:%M"),
         "workouts": wlist,
         "exercises": exlist,
         "balance": balance,
