@@ -274,16 +274,15 @@ function renderWorkout(app){
     // exercises
     html+=`<div class="title" style="margin:16px 0 10px">Harjutused</div>`;
     w.exercises.forEach(ex=>{
-      const exData=DATA.exercises[ex.name];
       const delta=exDelta(ex.name);
+      const g0=(ex.groups&&ex.groups.length)?ex.groups[0]:null;
+      const summary=g0?fmtSet(g0):"—";
       html+=`<div class="card tap exgroup" onclick="openExercise('${esc(ex.name)}')">
         <div class="row"><div class="setline" style="border:none;padding:0;flex:1">
           <span class="exn">${ex.name}${delta}</span></div>
-          <span class="muted" style="font-size:18px">›</span></div>`;
-      ex.groups.forEach(g=>{
-        html+=`<div class="setline"><span class="muted">${eq(g.equipment)}</span><span class="reps">${fmtSet(g)}</span></div>`;
-      });
-      html+=`</div>`;
+          <span class="reps" style="margin-right:10px">${summary}</span>
+          <span class="muted" style="font-size:18px">›</span></div>
+      </div>`;
     });
   }
   app.innerHTML=html;
