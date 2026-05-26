@@ -106,8 +106,9 @@ rclone lsd gdrive:_trenni_data
 ```bash
 cd ~/trenn
 source venv/bin/activate
-python convert_fit.py --help 2>&1 | head -5
-python analyze.py --help 2>&1 | head -5
+python v2/parse_fit.py --help 2>&1 | head -5
+python v2/parse_gpx.py --help 2>&1 | head -5
+python v2/render_html.py 2>&1 | head -5
 deactivate
 ```
 

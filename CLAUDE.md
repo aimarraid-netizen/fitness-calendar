@@ -14,7 +14,8 @@ Trenni järel: jaga Gymaholicu ÜKSIK-TRENNI CSV otse Telegrami Kratile
   → v2/render_html.py          (mobile-first HTML)
   → git push                   (GitHub Pages)
 
-Kardio: FIT-fail → v2/parse_fit.py (TODO, vana convert_fit.py loogika)
+Kardio: FIT-fail → v2/parse_fit.py
+Kardio: GPX/XML → v2/parse_gpx.py
 
 Lives trenni ajal (Kratt Telegramis):
   → v2/kratt_tools.py last/history   ("mis oli eelmine bench?")
@@ -52,9 +53,8 @@ https://aimarraid-netizen.github.io/trenn-d8b4c9a1/
 3. **Üks tõeallikas** — rekordid baasist, mitte külmunud personal_records.json
 4. **Tekst ütleb mustreid** mida kasutaja ise ei näe, EI korda tabelinumbreid
 
-## Vana süsteem (legacy, ära kasuta)
-`generate_calendar.py`, `restore_gymaholic.py`, `prepare_claude_project.py`, `pipeline.sh` jne.
-Plaan: arhiveerida `legacy/` alla. Backup vanadest andmetest: `backups/2026-05-22-pre-v2/`.
+## Vana süsteem
+Legacy v1 skriptid on eemaldatud. Kasuta ainult `v2/` mooduleid ja `pipeline.sh` v2 voogu.
 
 ## Conventions
 - Vasta eesti keeles

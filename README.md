@@ -79,13 +79,12 @@ Lisa rida:
 
 ## Failid
 
-- `watch.sh` - Peamine orkestrator
-- `convert_fit.py` - FIT → CSV konverter (Karvonen HR tsoonid)
-- `analyze.py` - Claude API analüüs + Discord posting
-- `bot.py` - Discord bot interaktiivseteks käskudeks
-- `setup_rclone.sh` - rclone seadistamise abiline
-- `prompts/workout_analysis.md` - Claude API prompti template
-- `DISCORD_BOT_SETUP.md` - Discord boti seadistamise juhend
+- `pipeline.sh` - v2 orkestrator (ZIP/FIT/GPX -> SQLite -> HTML)
+- `v2/parse_gymaholic_csv.py` - Gymaholic CSV parser
+- `v2/parse_fit.py` - FIT importer
+- `v2/parse_gpx.py` - GPX/XML importer
+- `v2/render_html.py` - HTML generaator
+- `v2/analyze.py` - analüüs
 
 ## Andmed
 
