@@ -53,7 +53,9 @@ header .sub{font-size:12px;color:var(--dim);font-weight:400}
 .cald.has.kardio,.cald.has.jooksmine{background:rgba(255,107,53,.30);border-color:rgba(255,107,53,.82)}
 .cald.has.kodune{background:rgba(255,196,0,.30);border-color:rgba(255,196,0,.80)}
 .cal-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
-.cald .dot{font-size:16px;line-height:1;margin-top:-2px;transform:translateY(-1px)}
+.cald .dots{display:flex;align-items:center;gap:2px;margin-top:-2px;transform:translateY(-1px)}
+.cald .dot{font-size:13px;line-height:1;display:inline-flex;align-items:center}
+.cald .dot-more{font-size:10px;line-height:1;color:var(--dim);font-weight:700}
 /* exercise rows */
 .exrow{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:6px;cursor:pointer}
 .exrow:active{background:var(--card2)}
@@ -224,7 +226,10 @@ function setHeader(t,s){document.getElementById("title").textContent=t;document.
 function renderCal(app){
   setHeader("Trenn",`${DATA.stats.total_workouts} trenni · ${DATA.stats.total_exercises} harjutust`);
   const byDate={};
-  DATA.workouts.forEach(w=>byDate[w.date]=w);
+  DATA.workouts.forEach(w=>{
+    if(!byDate[w.date]) byDate[w.date]=[];
+    byDate[w.date].push(w);
+  });
   // krat notes
   let html=`<div class="krat"><h3>📡 Kratt märkab</h3>`;
   DATA.krat_notes.forEach(n=>html+=`<div class="note">${n}</div>`);
@@ -250,9 +255,14 @@ function renderCal(app){
   for(let i=0;i<start;i++)html+=`<div class="cald empty"></div>`;
   for(let d=1;d<=days;d++){
     const ds=`${view.calY}-${String(view.calM+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    const w=byDate[ds];
-    if(w)html+=`<div class="cald has ${w.type}" onclick="openWorkout(${w.id})">${d}<span class="dot">${workoutIcon(w.type)}</span></div>`;
-    else html+=`<div class="cald">${d}</div>`;
+    const dayWs=byDate[ds]||[];
+    if(dayWs.length){
+      const dayTypes=[...new Set(dayWs.map(w=>isCardioType(w.type)?w.type:(w.type==="kodune"?"kodune":"jõusaal")))];
+      const primaryType=dayTypes[0];
+      const icons=dayTypes.slice(0,2).map(t=>`<span class="dot">${workoutIcon(t)}</span>`).join("");
+      const more=dayTypes.length>2?`<span class="dot-more">+${dayTypes.length-2}</span>`:"";
+      html+=`<div class="cald has ${primaryType}" onclick="openWorkout(${dayWs[0].id})">${d}<span class="dots">${icons}${more}</span></div>`;
+    }else html+=`<div class="cald">${d}</div>`;
   }
   html+=`</div></div>`;
   // kuu kokkuvõte
