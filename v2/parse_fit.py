@@ -174,15 +174,15 @@ def archive_fit(fit_path: Path, ts: datetime) -> Path:
     return dest
 
 
-def process_file(fit_path: Path, conn, archive: bool = True) -> bool:
-    """Parsi + impordi üks FIT fail. Tagasta True kui edukalt lisatud."""
+def process_file(fit_path: Path, conn, archive: bool = True) -> str:
+    """Parsi + impordi üks FIT fail. Tagastab: added|duplicate|failed."""
     print(f"\n📂 {fit_path.name}")
     data = parse_fit(fit_path)
     if data is None:
         FAILED.mkdir(parents=True, exist_ok=True)
         shutil.move(str(fit_path), str(FAILED / fit_path.name))
         print(f"  ✗ Parsimisveaga — liigutatud failed/")
-        return False
+        return "failed"
 
     added, wid = insert_workout(conn, fit_path, data)
     sport_et = SPORT_MAP.get(data["sport"], data["sport"])
@@ -199,7 +199,7 @@ def process_file(fit_path: Path, conn, archive: bool = True) -> bool:
         dest = archive_fit(fit_path, ts)
         print(f"  📦 Arhiveeritud → {dest.name}")
 
-    return added
+    return "added" if added else "duplicate"
 
 
 def ensure_distance_column(conn):
@@ -242,10 +242,10 @@ def main():
 
     for fp in files:
         archive = fp.parent != PROCESSED_FIT  # processed faile ei arhiveeri uuesti
-        ok = process_file(fp, conn, archive=archive)
-        if ok:
+        status = process_file(fp, conn, archive=archive)
+        if status == "added":
             added += 1
-        elif ok is False:
+        elif status == "duplicate":
             skipped += 1
         else:
             failed += 1

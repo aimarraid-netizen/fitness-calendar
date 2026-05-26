@@ -65,6 +65,10 @@ def _parse_duration(raw):
 
 def _workout_type(name):
     n = (name or "").lower()
+    if "trenn a" in n or "workout a" in n:
+        return "jalad"
+    if "trenn b" in n or "workout b" in n:
+        return "selg"
     if "trenn c" in n or "workout c" in n or "kodu" in n:
         return "kodune"
     return "jõusaal"

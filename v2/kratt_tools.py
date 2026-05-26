@@ -30,7 +30,7 @@ def get_last(conn, exercise):
         val = f"{s['work_weight']}kg × {s['top_reps']}"
     else:
         val = f"{s['top_reps']} kordust" if s["top_reps"] else "—"
-    eq = cfg.DEFAULT_EQUIPMENT.get(exercise, "")
+    eq = s.get("equipment") or cfg.DEFAULT_EQUIPMENT.get(exercise, "")
     return f"{exercise}: {val} ({s['date']}, {eq})"
 
 
@@ -166,15 +166,23 @@ def import_csv(conn, csv_path):
 def import_fit(conn, fit_path):
     """Impordi FIT-fail (kardio) ja regenereeri HTML."""
     import parse_fit as pf
-    added = pf.process_file(Path(fit_path), conn, archive=True)
-    return "✓ FIT imporditud" if added else "↩ Juba olemas, vahele jäetud"
+    status = pf.process_file(Path(fit_path), conn, archive=True)
+    if status == "added":
+        return "✓ FIT imporditud"
+    if status == "duplicate":
+        return "↩ Juba olemas, vahele jäetud"
+    return "❌ FIT import ebaõnnestus"
 
 
 def import_gpx(conn, gpx_path):
-    """Impordi GPX/XML-fail (kardio)."""
+    """Impordi GPX/XML-fail (kardio) ja regenereeri HTML."""
     import parse_gpx as pg
-    added = pg.process_file(Path(gpx_path), conn, archive=True)
-    return "✓ GPX imporditud" if added else "↩ Juba olemas, vahele jäetud"
+    status = pg.process_file(Path(gpx_path), conn, archive=True)
+    if status == "added":
+        return "✓ GPX imporditud"
+    if status == "duplicate":
+        return "↩ Juba olemas, vahele jäetud"
+    return "❌ GPX import ebaõnnestus"
 
 
 def import_zip(conn, zip_path):

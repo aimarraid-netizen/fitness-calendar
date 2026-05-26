@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS workouts (
     workout_name TEXT,
     workout_type TEXT,
     duration_min INTEGER,
+    distance_m REAL,
     total_volume REAL,
     avg_hr INTEGER,
     kcal INTEGER,

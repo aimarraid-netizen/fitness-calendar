@@ -126,23 +126,31 @@ def parse_gpx(gpx_path: Path) -> dict | None:
         ext = p.find("g:extensions", ns)
         if ext is None:
             continue
+
+        point_hr = None
+
         # Garmin namespace
         tpe = ext.find(f"{{{EXT_NS}}}TrackPointExtension")
         if tpe is not None:
             hr_el = tpe.find(f"{{{EXT_NS}}}hr")
             if hr_el is not None and hr_el.text:
                 try:
-                    hr_samples.append(int(hr_el.text))
+                    point_hr = int(hr_el.text)
                 except ValueError:
                     pass
+
         # Fallback: otsi hr tag ilma namespaceta
-        if not hr_samples:
+        if point_hr is None:
             for child in ext.iter():
                 if child.tag.split("}")[-1] == "hr" and child.text:
                     try:
-                        hr_samples.append(int(child.text))
+                        point_hr = int(child.text)
+                        break
                     except ValueError:
                         pass
+
+        if point_hr is not None:
+            hr_samples.append(point_hr)
 
     avg_hr = round(sum(hr_samples) / len(hr_samples)) if hr_samples else None
     max_hr_val = max(hr_samples) if hr_samples else None
@@ -201,14 +209,14 @@ def archive_gpx(gpx_path: Path, ts: datetime) -> Path:
     return dest
 
 
-def process_file(gpx_path: Path, conn, archive: bool = True) -> bool:
+def process_file(gpx_path: Path, conn, archive: bool = True) -> str:
     print(f"\n📂 {gpx_path.name}")
     data = parse_gpx(gpx_path)
     if data is None:
         FAILED.mkdir(parents=True, exist_ok=True)
         shutil.move(str(gpx_path), str(FAILED / gpx_path.name))
         print("  ✗ Parsimisveaga — liigutatud failed/")
-        return False
+        return "failed"
 
     added, wid = insert_workout(conn, gpx_path, data)
     sport_et = SPORT_MAP.get(data["sport"], data["sport"])
@@ -224,7 +232,7 @@ def process_file(gpx_path: Path, conn, archive: bool = True) -> bool:
         dest = archive_gpx(gpx_path, data["timestamp"])
         print(f"  📦 Arhiveeritud → {dest.name}")
 
-    return added
+    return "added" if added else "duplicate"
 
 
 def main():
@@ -257,10 +265,10 @@ def main():
 
     added = skipped = failed = 0
     for fp in files:
-        ok = process_file(fp, conn)
-        if ok:
+        status = process_file(fp, conn)
+        if status == "added":
             added += 1
-        elif ok is False:
+        elif status == "duplicate":
             skipped += 1
         else:
             failed += 1
