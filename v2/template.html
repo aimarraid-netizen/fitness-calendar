@@ -281,6 +281,9 @@ function exDelta(name){
   const ex=DATA.exercises[name];if(!ex||ex.history.length<2)return"";
   const h=ex.history,last=h[h.length-1],prev=h[h.length-2];
   if(last.equipment!==prev.equipment)return` <span class="delta d-neutral">↔ vahetus</span>`;
+  // Pikk paus (>4 nädalat) -> uus tsükkel, ei võrdle
+  const daysDiff=(new Date(last.date)-new Date(prev.date))/(1000*60*60*24);
+  if(daysDiff>28)return` <span class="delta d-neutral">↺ uus tsükkel</span>`;
   if(last.weight!=null&&prev.weight!=null){
     // Kaalutõus: näita ainult kaal (roheline). Korduste langus = planeeritud, EI punane.
     if(last.weight>prev.weight)return` <span class="delta d-up">▲ +${(last.weight-prev.weight).toFixed(1)}kg</span>`;

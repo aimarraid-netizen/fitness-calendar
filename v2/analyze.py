@@ -27,6 +27,16 @@ def exercise_status(sessions):
     last = sessions[-1]
     prev = sessions[-2]
 
+    # Pikk paus (>4 nädalat) = uus tsükkel, ei saa võrrelda eelmisega
+    from datetime import datetime
+    try:
+        days_gap = (datetime.strptime(last["date"], "%Y-%m-%d") -
+                    datetime.strptime(prev["date"], "%Y-%m-%d")).days
+        if days_gap > 28:
+            return "uus"
+    except Exception:
+        pass
+
     # aja-põhine harjutus (Plank): võrdle kestust sekundites
     ld, pd = last.get("top_duration"), prev.get("top_duration")
     if ld is not None and pd is not None:
