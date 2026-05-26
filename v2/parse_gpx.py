@@ -221,7 +221,11 @@ def process_file(gpx_path: Path, conn, archive: bool = True) -> str:
     added, wid = insert_workout(conn, gpx_path, data)
     sport_et = SPORT_MAP.get(data["sport"], data["sport"])
     dist = f"{data['distance_m']/1000:.1f} km" if data.get("distance_m") else "?"
-    dur = f"{int(data['duration_sec']//60)} min" if data.get("duration_sec") else "?"
+    if data.get("duration_sec"):
+        mins = int(data["duration_sec"] // 60)
+        dur = f"{mins//60:02d}:{mins%60:02d}" if mins >= 60 else f"{mins} min"
+    else:
+        dur = "?"
 
     if added:
         print(f"  ✓ Lisatud (id={wid}): {sport_et} | {dist} | {dur} | {data.get('avg_hr', '?')} bpm")
