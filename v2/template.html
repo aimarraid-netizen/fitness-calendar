@@ -76,7 +76,7 @@ header .sub{font-size:12px;color:var(--dim);font-weight:400}
 .exgroup{margin-bottom:4px}
 .delta{font-size:12px;font-weight:600;margin-left:6px}
 .d-up{color:var(--green)}.d-dn{color:var(--red)}.d-neutral{color:var(--gray)}
-.chart-box{height:240px;margin:14px 0;position:relative}
+.chart-box{height:280px;margin:4px 0;position:relative}
 .seg{display:flex;gap:6px;margin-bottom:14px;background:var(--card2);padding:4px;border-radius:10px}
 .seg button{flex:1;background:none;border:none;color:var(--dim);padding:8px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer}
 .seg button.on{background:var(--accent);color:#fff}
@@ -87,6 +87,14 @@ header .sub{font-size:12px;color:var(--dim);font-weight:400}
 .histline:first-child{border-top:none}
 .histline .hd{color:var(--dim)}
 .empty-state{text-align:center;color:var(--dim);padding:40px 20px}
+/* Exercise detail info cards */
+.exinfo-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:12px}
+.exinfo-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.exinfo-lbl{font-size:11px;color:var(--dim);margin-bottom:4px;white-space:nowrap}
+.exinfo-val{font-size:20px;font-weight:700;color:var(--txt)}
+/* Chart legend */
+.chart-legend{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:12px;color:var(--dim)}
+.legend-item{display:flex;align-items:center;gap:4px}
 </style>
 </head>
 <body>
@@ -306,20 +314,51 @@ function renderExercise(app){
   const ex=DATA.exercises[view.ex];
   setHeader(ex.name,`${ex.muscle} · ${eq(ex.equipment)}`);
   const st=ex.status;
-  let html=`<div class="card"><div class="row">
-    <div><span class="stat st-${st}">${STLABEL[st]||st}</span>
-    ${ex.weeks_stuck&&st==="seisab"?`<span class="muted" style="margin-left:8px">~${ex.weeks_stuck} näd</span>`:""}</div>
-    ${ex.pr?`<div style="text-align:right"><div class="muted">rekord</div><div class="title">${prText(ex)}</div></div>`:""}
+  const last=ex.history.length?ex.history[ex.history.length-1]:null;
+  const tgt=ex.target||{};
+
+  // Info-kaardid rida: praegune raskus | skeem | trenne kokku
+  let infoHtml=`<div class="exinfo-row">`;
+  if(last&&last.weight!=null){
+    infoHtml+=`<div class="exinfo-card"><div class="exinfo-lbl">Praegune raskus</div><div class="exinfo-val">${last.weight} kg</div></div>`;
+  }
+  if(last&&last.sets&&last.reps){
+    infoHtml+=`<div class="exinfo-card"><div class="exinfo-lbl">Praegune skeem</div><div class="exinfo-val">${last.sets}×${last.reps}</div></div>`;
+  }
+  if(tgt.sets&&tgt.reps_min&&tgt.reps_max){
+    infoHtml+=`<div class="exinfo-card"><div class="exinfo-lbl">Eesmärk</div><div class="exinfo-val">${tgt.sets}×${tgt.reps_min}–${tgt.reps_max}</div></div>`;
+  }
+  infoHtml+=`<div class="exinfo-card"><div class="exinfo-lbl">Trenne kokku</div><div class="exinfo-val">${ex.history.length}</div></div>`;
+  infoHtml+=`</div>`;
+
+  // Staatus + rekord
+  let html=infoHtml;
+  html+=`<div class="card" style="padding:12px 16px"><div class="row">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="stat st-${st}">${STLABEL[st]||st}</span>
+      ${ex.weeks_stuck&&st==="seisab"?`<span class="muted">~${ex.weeks_stuck} näd</span>`:""}
+    </div>
+    ${ex.pr?`<div style="text-align:right"><div class="muted" style="font-size:11px">rekord</div><div style="font-weight:600;font-size:14px">${prText(ex)}</div></div>`:""}
   </div></div>`;
-  html+=`<div class="card"><div class="chart-box"><canvas id="exchart"></canvas></div></div>`;
-  // history list
+
+  // Legend
+  html+=`<div class="chart-legend">
+    <span class="legend-item"><svg width="12" height="12"><circle cx="6" cy="6" r="5" fill="#2f81f7"/></svg> Õnnestus</span>
+    <span class="legend-item"><svg width="14" height="14"><polygon points="7,1 13,7 7,13 1,7" fill="#f85149"/></svg> Ebaõnnestumine</span>
+    <span class="legend-item" style="font-weight:700;color:#e6edf3">3×10</span><span class="legend-item muted">= seeriad × kordused</span>
+  </div>`;
+
+  html+=`<div class="card" style="padding:10px 12px"><div class="chart-box"><canvas id="exchart"></canvas></div></div>`;
+
+  // Ajalugu
   html+=`<div class="title" style="margin:16px 0 10px">Ajalugu</div><div class="card">`;
   [...ex.history].reverse().forEach(h=>{
     let val;
     if(h.duration!=null&&h.duration>0)val=fmtDur(h.duration);
-    else if(h.weight!=null)val=`${h.weight}kg × ${h.reps}`;
+    else if(h.weight!=null)val=`${h.sets||3}×${h.reps} · ${h.weight}kg`;
     else val=h.reps!=null?`${h.reps} kordust`:"–";
-    html+=`<div class="histline"><span class="hd">${fmtDate(h.date)} · ${eq(h.equipment)}</span><span>${val}</span></div>`;
+    const failMark=h.fail?` <span style="color:#f85149;font-size:11px">❌</span>`:"";
+    html+=`<div class="histline"><span class="hd">${fmtDate(h.date)}</span><span>${val}${failMark}</span></div>`;
   });
   html+=`</div>`;
   app.innerHTML=html;
@@ -333,106 +372,127 @@ function prText(ex){
   }
   return p.weight!=null?`${p.weight}kg × ${p.reps}`:`${p.reps} kordust`;
 }
-let curChartKey="weight";
-function setChart(key,btn){
-  document.querySelectorAll(".seg button").forEach(b=>b.classList.remove("on"));
-  btn.classList.add("on");drawChart(key);
-}
+
 function drawChart(){
   const ex=DATA.exercises[view.ex];
   const h=ex.history;
   if(chartRef)chartRef.destroy();
   const ctx=document.getElementById("exchart");
   if(!ctx)return;
-  const labels=h.map(x=>fmtDate(x.date));
 
-  // Aja-põhine harjutus (Plank jne): ainult kestus
+  // Aja-põhine (Plank jne)
   if(ex.is_time){
+    const labels=h.map(x=>fmtDate(x.date));
     const data=h.map(x=>x.duration!=null?Math.round(x.duration/60*10)/10:null);
     chartRef=new Chart(ctx,{type:"line",data:{labels,datasets:[{label:"Kestus (min)",data,
-      borderColor:"#2f81f7",backgroundColor:"rgba(47,129,247,.12)",fill:true,tension:.3,
-      pointRadius:4,pointBackgroundColor:"#2f81f7",spanGaps:true}]},
+      borderColor:"#2f81f7",backgroundColor:"rgba(47,129,247,.1)",fill:true,tension:.3,
+      pointRadius:5,pointBackgroundColor:"#2f81f7",spanGaps:true}]},
       options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`Kestus: ${c.parsed.y??'–'} min`}}},
-        scales:{x:{grid:{color:"#262d3a"},ticks:{color:"#8b949e",maxRotation:0,autoSkip:true,maxTicksLimit:6}},
-                y:{grid:{color:"#262d3a"},ticks:{color:"#8b949e"}}}}});
+        plugins:{legend:{display:false}},
+        scales:{x:{grid:{color:"#1c2330"},ticks:{color:"#6e7681",maxRotation:45,font:{size:10}}},
+                y:{grid:{color:"#1c2330"},ticks:{color:"#6e7681",callback:v=>v+" min"}}}}});
     return;
   }
 
-  // Kaaluga harjutus: topelttelg — kaal vasakul (sinine), kordused paremal (roheline)
-  // Punktide värvid: plaanipärane korduste langus pärast kaalutõusu = oranž (mitte punane)
+  // Trepp-graafik: raskus Y-teljel, igal punktil silt "3×8"
+  // Õnnestumine = sinine ring, ebaõnnestumine = punane romb
+  const labels=h.map(x=>fmtDate(x.date));
   const wData=h.map(x=>x.weight);
-  const rData=h.map(x=>x.reps);
 
-  // Arvuta iga punkti värv
-  function ptColors(data,key){
-    return data.map((v,i)=>{
-      if(v==null||i===0)return"#8b949e";
-      const prev=data[i-1];
-      if(prev==null)return"#8b949e";
-      if(key==="weight"){
-        if(v>prev)return"#3fb950"; // kaalutõus = roheline
-        if(v<prev)return"#f85149"; // kaalu langus = punane (tõeline regress)
-        return"#8b949e";
-      }else{ // reps
-        const pw=wData[i-1],cw=wData[i];
-        const weightRose=(cw!=null&&pw!=null&&cw>pw);
-        if(v>prev)return"#3fb950"; // korduste tõus = roheline
-        if(v<prev)return weightRose?"#d29922":"#f85149"; // pärast kaalutõusu = oranž (plaanipärane); muidu punane
-        return"#8b949e";
-      }
-    });
-  }
+  // Punkti värv ja kuju
+  const ptBg=h.map(x=>x.fail?"#f85149":"#2f81f7");
+  const ptBorder=h.map(x=>x.fail?"#ff6b6b":"#58a6ff");
+  const ptRadius=h.map(()=>6);
+  const ptStyle=h.map(x=>x.fail?"rectRot":"circle"); // rectRot = romb
 
-  const wColors=ptColors(wData,"weight");
-  const rColors=ptColors(rData,"reps");
-
-  const datasets=[];
-  const hasWeight=wData.some(v=>v!=null);
-  const hasReps=rData.some(v=>v!=null);
-
-  if(hasWeight){
-    datasets.push({
-      label:"Kaal (kg)", data:wData, yAxisID:"yW",
-      borderColor:"#2f81f7", backgroundColor:"rgba(47,129,247,.0)",
-      tension:.3, pointRadius:5, pointBackgroundColor:wColors,
-      pointBorderColor:wColors, spanGaps:true, order:1
-    });
-  }
-  if(hasReps){
-    datasets.push({
-      label:"Kordused", data:rData, yAxisID:"yR",
-      borderColor:"#3fb950", backgroundColor:"rgba(63,185,80,.0)",
-      tension:.3, pointRadius:5, pointBackgroundColor:rColors,
-      pointBorderColor:rColors, spanGaps:true, borderDash:[4,3], order:2
-    });
-  }
-
-  const scales={
-    x:{grid:{color:"#262d3a"},ticks:{color:"#8b949e",maxRotation:0,autoSkip:true,maxTicksLimit:6}}
+  // Kohandatud plugin: punkti top-label "3×8"
+  const labelPlugin={
+    id:"ptLabels",
+    afterDatasetsDraw(chart){
+      const{ctx:c,scales:{x,y}}=chart;
+      h.forEach((pt,i)=>{
+        if(pt.weight==null)return;
+        const cx=x.getPixelForValue(i);
+        const cy=y.getPixelForValue(pt.weight);
+        const sets=pt.sets||3;
+        const reps=pt.reps||"?";
+        const lbl=`${sets}×${reps}`;
+        const isFail=pt.fail;
+        c.save();
+        c.font="bold 11px -apple-system,system-ui,sans-serif";
+        c.fillStyle=isFail?"#f85149":"#e6edf3";
+        c.textAlign="center";
+        c.textBaseline="bottom";
+        c.fillText(lbl,cx,cy-10);
+        c.restore();
+      });
+    }
   };
-  if(hasWeight){
-    scales.yW={position:"left",grid:{color:"#262d3a"},ticks:{color:"#2f81f7"},
-      title:{display:true,text:"kg",color:"#2f81f7",font:{size:11}}};
-  }
-  if(hasReps){
-    scales.yR={position:"right",grid:{drawOnChartArea:!hasWeight,color:"#262d3a"},
-      ticks:{color:"#3fb950"},
-      title:{display:true,text:"kordused",color:"#3fb950",font:{size:11}}};
-  }
 
-  chartRef=new Chart(ctx,{type:"line",data:{labels,datasets},
-    options:{responsive:true,maintainAspectRatio:false,
+  chartRef=new Chart(ctx,{
+    type:"line",
+    plugins:[labelPlugin],
+    data:{
+      labels,
+      datasets:[{
+        data:wData,
+        borderColor:"#2f81f7",
+        borderWidth:2,
+        backgroundColor:"rgba(47,129,247,.06)",
+        fill:true,
+        tension:0,           // trepp-efekt: sirged jooned
+        stepped:"before",    // trepp: tõus toimub kohe
+        pointRadius:ptRadius,
+        pointBackgroundColor:ptBg,
+        pointBorderColor:ptBorder,
+        pointBorderWidth:2,
+        pointStyle:ptStyle,
+        spanGaps:true,
+        hoverRadius:8,
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      layout:{padding:{top:26,right:10,left:4,bottom:4}},
       plugins:{
-        legend:{display:hasWeight&&hasReps,labels:{color:"#8b949e",boxWidth:12,font:{size:11}}},
-        tooltip:{callbacks:{
-          label:c=>{
-            if(c.dataset.label==="Kaal (kg)")return`Kaal: ${c.parsed.y??'–'} kg`;
-            return`Kordused: ${c.parsed.y??'–'}`;
-          }
-        }}
+        legend:{display:false},
+        tooltip:{
+          callbacks:{
+            title:items=>{
+              const i=items[0].dataIndex;
+              return h[i].date;
+            },
+            label:items=>{
+              const i=items.dataIndex;
+              const pt=h[i];
+              const s=pt.sets||3,r=pt.reps||"?";
+              const w=pt.weight!=null?`${pt.weight} kg`:"kaal puudub";
+              return [`${w}  ·  ${s}×${r}`,pt.fail?"❌ kordused kukkusid":"✅ õnnestus"];
+            }
+          },
+          backgroundColor:"#1c2330",
+          borderColor:"#262d3a",
+          borderWidth:1,
+          titleColor:"#e6edf3",
+          bodyColor:"#8b949e",
+          padding:10,
+          cornerRadius:8,
+        }
       },
-      scales}});
+      scales:{
+        x:{
+          grid:{color:"#1c2330"},
+          ticks:{color:"#6e7681",maxRotation:45,font:{size:10},autoSkip:true,maxTicksLimit:8}
+        },
+        y:{
+          grid:{color:"#1c2330"},
+          ticks:{color:"#6e7681",callback:v=>v+" kg",font:{size:11}},
+          grace:"10%"
+        }
+      }
+    }
+  });
 }
 
 // ===== EXERCISE LIST =====

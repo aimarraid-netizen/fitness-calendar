@@ -78,10 +78,52 @@ def build_payload(conn):
         })
 
     # Harjutused + ajalugu graafiku jaoks
+    # Target rep ranges DB-st
+    ex_targets = {}
+    for row in conn.execute("SELECT name, target_sets, target_reps_min, target_reps_max FROM exercises"):
+        ex_targets[row["name"]] = {
+            "sets": row["target_sets"],
+            "reps_min": row["target_reps_min"],
+            "reps_max": row["target_reps_max"],
+        }
+
     exlist = {}
     for name in q.all_exercise_names(conn):
         sess = q.exercise_sessions(conn, name)
         info = statuses.get(name, {})
+        tgt = ex_targets.get(name, {})
+        # Arvuta fail iga sessiooni jaoks:
+        # fail = sama kaal mis eelmine + kordused väiksemad (ei teinud progressi)
+        history_with_fail = []
+        for i, s in enumerate(sess):
+            fail = False
+            if i > 0:
+                prev_s = sess[i - 1]
+                same_equip = s["equipment"] == prev_s["equipment"]
+                days_gap = 0
+                try:
+                    from datetime import datetime as _dt
+                    days_gap = (_dt.strptime(s["date"], "%Y-%m-%d") -
+                                _dt.strptime(prev_s["date"], "%Y-%m-%d")).days
+                except Exception:
+                    pass
+                if same_equip and days_gap <= 28:
+                    pw, cw = prev_s["work_weight"], s["work_weight"]
+                    pr, cr = prev_s["top_reps"], s["top_reps"]
+                    # Sama kaal, kordused kukkusid = fail
+                    if pw is not None and cw is not None and cw == pw:
+                        if pr is not None and cr is not None and cr < pr:
+                            fail = True
+            history_with_fail.append({
+                "date": s["date"],
+                "weight": s["work_weight"],
+                "reps": s["top_reps"],
+                "sets": len(s.get("sets", [])) or 3,
+                "duration": s.get("top_duration"),
+                "volume": round(s["total_volume"]),
+                "equipment": s["equipment"],
+                "fail": fail,
+            })
         exlist[name] = {
             "name": name,
             "muscle": cfg.muscle_for(name),
@@ -91,13 +133,8 @@ def build_payload(conn):
             "status": info.get("status", "uus"),
             "weeks_stuck": info.get("weeks_stuck"),
             "pr": prs.get(name),
-            "history": [
-                {"date": s["date"], "weight": s["work_weight"],
-                 "top_weight": s["top_weight"], "reps": s["top_reps"],
-                 "duration": s.get("top_duration"),
-                 "volume": round(s["total_volume"]), "equipment": s["equipment"]}
-                for s in sess
-            ],
+            "target": tgt,
+            "history": history_with_fail,
         }
 
     # Ülevaade / mustrid
