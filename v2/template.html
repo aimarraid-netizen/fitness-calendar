@@ -120,12 +120,26 @@ let chartRef=null;
 function eq(e){return EQUIP[e]||e||"";}
 const CARDIO_TYPES=["kõndimine","rattasõit","ujumine","matk","jooksmine","kardio"];
 function isCardioType(t){return CARDIO_TYPES.includes(t);}
-function cardioIcon(t){return {kõndimine:"🚶",rattasõit:"🚴",ujumine:"🏊",matk:"🌲",jooksmine:"🏃",kardio:"❤️"}[t]||"🏃";}
-function workoutIcon(t){
-  if(t==="selg"||t==="rind"||t==="jalad"||t==="jõusaal")return"⎯◉⎯";
-  if(t==="kodune")return"🏠";
-  return {kõndimine:"🚶",rattasõit:"🚴",ujumine:"🏊",matk:"🌲",jooksmine:"🏃",kardio:"❤️"}[t]||"⎯◉⎯";
+// IKONIDE VALIK: muuda ainult seda ühte rida ("A" | "B" | "C")
+const ICON_SET = "A";
+const ICONS = {
+  A: { // custom lihtne + puhas
+    jõusaal:"🏋️", kodune:"🏠", kõndimine:"🚶", rattasõit:"🚴", ujumine:"🏊", matk:"🥾", jooksmine:"🏃", kardio:"❤️"
+  },
+  B: { // neutraalne klassika
+    jõusaal:"💪", kodune:"🏡", kõndimine:"🚶", rattasõit:"🚲", ujumine:"🏊", matk:"🌲", jooksmine:"🏃", kardio:"🫀"
+  },
+  C: { // minimalistlik
+    jõusaal:"◆", kodune:"⌂", kõndimine:"•", rattasõit:"◌", ujumine:"≈", matk:"▴", jooksmine:"▸", kardio:"♥"
+  }
+};
+function iconFor(type){
+  const set=ICONS[ICON_SET]||ICONS.A;
+  const t=isCardioType(type)?type:(type==="kodune"?"kodune":"jõusaal");
+  return set[t]||set.jõusaal;
 }
+function cardioIcon(t){return iconFor(t);}
+function workoutIcon(t){return iconFor(t);}
 function fmtSet(g){
   if(g.duration!=null&&g.duration>0){
     return `${g.count}×${fmtDur(g.duration)}`;
