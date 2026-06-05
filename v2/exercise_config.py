@@ -11,7 +11,6 @@ DEFAULT_EQUIPMENT = {
     "Barbell Bench Press": "barbell",
     "Barbell Curl": "barbell",
     "Barbell Squat": "barbell",
-    "Bodyweight Squat": "bodyweight",
     "Bent Over Barbell Row": "barbell",
     "Romanian Deadlift": "barbell",
     "Incline Dumbbell Press": "dumbbell",
@@ -54,7 +53,6 @@ MUSCLE_GROUP = {
     "Triceps Pushdown with Rope": "triitseps",
     "Triceps Dips": "triitseps",
     "Barbell Squat": "jalad",
-    "Bodyweight Squat": "jalad",
     "Romanian Deadlift": "jalad",
     "Lunge": "jalad",
     "Single-Leg Press": "jalad",
@@ -76,7 +74,6 @@ NO_WEIGHT_EXPECTED = {
     "Lying Leg Raise",
     "Triceps Dips",
     "Lunge",
-    "Bodyweight Squat",
     "Face Pull",          # vahel TRX/kehakaal
 }
 
