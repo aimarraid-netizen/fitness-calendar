@@ -45,6 +45,17 @@ fi
 
 log "========== PIPELINE ALGUS (v2) =========="
 
+# Ootamatu katkestus (set -e) peab andma korrektse error-JSON-i,
+# mida Kratt saab Discordi edastada.
+pipeline_done=0
+on_exit() {
+    if (( pipeline_done == 0 )); then
+        log "ERROR: pipeline katkes ootamatult (exit $?)"
+        echo '{"status":"error","message":"pipeline katkes ootamatult, vaata logs/pipeline.log"}'
+    fi
+}
+trap on_exit EXIT
+
 zip_count=0
 fit_count=0
 gpx_count=0
@@ -53,14 +64,7 @@ zip_names=()
 fit_names=()
 gpx_names=()
 
-# 1) Sync Google Drive'ist
-log "1. rclone sync..."
-if ! rclone sync "gdrive:_trenn_input" data/incoming/ --log-file=logs/rclone.log 2>&1; then
-    log "ERROR: rclone sync ebaõnnestus"
-    echo '{"status":"error","message":"rclone sync ebaõnnestus"}'
-    exit 1
-fi
-log "   OK"
+# 1) Sisend: Kratt paneb failid otse data/incoming/ (Google Drive voog on pensionil)
 
 # 2) Gymaholic ZIP -> CSV -> v2/parse_gymaholic_csv.py
 log "2. Gymaholic ZIP-id..."
@@ -184,6 +188,21 @@ else
     log "4. Uusi faile pole — väljundid jäävad samaks"
 fi
 
+# 5) Nädala kokkuvõte (pühapäeviti, kord nädalas, ainult kui uusi faile tuli)
+STAMP="logs/last_weekly_summary"
+if (( total > 0 )) && [[ "$(date +%u)" == "7" ]] \
+   && [[ "$(cat "$STAMP" 2>/dev/null)" != "$(date +%G-W%V)" ]] \
+   && [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    log "5. Nädala kokkuvõte (weekly_summary.py)..."
+    if python3 weekly_summary.py >> "$LOG_FILE" 2>&1; then
+        date +%G-W%V > "$STAMP"
+        log "   OK: weekly_summary"
+    else
+        errors+=("weekly_summary")
+        log "   HOIATUS: weekly_summary ebaõnnestus"
+    fi
+fi
+
 log "PIPELINE LÕPP: $zip_count ZIP, $fit_count FIT, $gpx_count GPX/XML, ${#errors[@]} viga"
 log "=========================================="
 
@@ -192,6 +211,7 @@ if (( ${#errors[@]} > 0 )); then
     error_json=$(printf '%s\n' "${errors[@]}" | python3 -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin]))")
 fi
 
+pipeline_done=1
 cat <<EOF
 {"status":"ok","processed":$total,"zips":$zip_count,"fits":$fit_count,"gpxs":$gpx_count,"errors":$error_json}
 EOF

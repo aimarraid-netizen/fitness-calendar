@@ -1,0 +1,23 @@
+
+;-----------------
+;Trenn X edge
+;-----------------
+;Date;Dec 31., 23:50
+;Duration;0h:45m
+;KCAL;300
+;Heart rate;110 bpm
+
+#;Plank;REPS;TIME;REST
+N;20 reps
+1;;;1:30;0:00
+
+#;Face Pull;REPS;TIME;REST
+N;15-20 reps
+1;;;;0:00
+2;;;;0:00
+
+#;Barbell Curl;REPS;TIME;REST
+N;8-12 reps
+1;;35 kg x 8;;0:00
+see-rida-on-katki;;;
+2;;35 kg x 8;;0:00

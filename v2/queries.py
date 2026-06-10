@@ -3,25 +3,25 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from db import get_db
 import exercise_config as cfg
+from db import get_db
 
 
-def all_workouts(conn):
+def all_workouts(conn) -> list[dict]:
     """Kõik trennid uuemast vanimani."""
     return [dict(r) for r in conn.execute(
         "SELECT * FROM workouts ORDER BY timestamp DESC"
     )]
 
 
-def workout_sets(conn, workout_id):
+def workout_sets(conn, workout_id: int) -> list[dict]:
     """Ühe trenni seeriad järjekorras."""
     return [dict(r) for r in conn.execute(
         "SELECT * FROM sets WHERE workout_id=? ORDER BY id", (workout_id,)
     )]
 
 
-def exercise_sessions(conn, exercise_name):
+def exercise_sessions(conn, exercise_name: str) -> list[dict]:
     """Harjutuse ajalugu sessioonide kaupa (vanimast uuemani).
 
     Tagastab listi: [{date, timestamp, equipment, sets:[{reps,weight}],
@@ -60,18 +60,18 @@ def exercise_sessions(conn, exercise_name):
     return result
 
 
-def all_exercise_names(conn):
+def all_exercise_names(conn) -> list[str]:
     return [r["exercise_name"] for r in conn.execute(
         "SELECT DISTINCT exercise_name FROM sets ORDER BY exercise_name"
     )]
 
 
-def exercise_meta(conn, name):
+def exercise_meta(conn, name: str) -> dict | None:
     r = conn.execute("SELECT * FROM exercises WHERE name=?", (name,)).fetchone()
     return dict(r) if r else None
 
 
-def compute_prs(conn):
+def compute_prs(conn) -> dict[str, dict]:
     """Arvuta rekordid baasist (üks tõeallikas).
 
     PR = suurim kaal harjutuse kohta; sama kaalu puhul enim kordusi.
@@ -104,7 +104,7 @@ def compute_prs(conn):
     return prs
 
 
-def weekly_volume(conn):
+def weekly_volume(conn) -> dict[str, dict[str, float]]:
     """Maht nädalate kaupa (ISO nädal) lihasgrupi lõikes."""
     rows = conn.execute(
         """SELECT w.date, s.exercise_name, s.total_volume, s.reps

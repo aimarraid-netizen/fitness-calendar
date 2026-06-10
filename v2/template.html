@@ -98,11 +98,19 @@ header .sub{font-size:12px;color:var(--dim);font-weight:400}
 /* Chart legend */
 .chart-legend{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:12px;color:var(--dim)}
 .legend-item{display:flex;align-items:center;gap:4px}
+/* utility */
+.mt-block{margin:16px 0 10px}
+.pad-wide{padding:12px 16px}
+/* bottom nav */
+.bottomnav{position:fixed;bottom:0;left:0;right:0;background:rgba(13,17,23,.95);backdrop-filter:blur(10px);border-top:1px solid var(--border);display:flex;z-index:60}
+.bottomnav .navbtn{flex:1;text-align:center;padding:12px;cursor:pointer}
+.bottomnav .navlbl{font-size:11px;margin-top:2px}
+.gen-stamp{position:fixed;top:6px;right:8px;font-size:10px;color:rgba(255,255,255,0.25);pointer-events:none;z-index:9999}
 </style>
 </head>
 <body>
 <header>
-  <span class="back" id="back">‹</span>
+  <span class="back" id="back" role="button" tabindex="0" aria-label="Tagasi">‹</span>
   <div style="flex:1">
     <h1 id="title">Trenn</h1>
     <div class="sub" id="subtitle"></div>
@@ -162,8 +170,6 @@ function iconFor(type){
   }
   return `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style="color:#ffffff"><g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${glyph}</g></svg>`;
 }
-function cardioIcon(t){return iconFor(t);}
-function workoutIcon(t){return iconFor(t);}
 function fmtSet(g){
   if(g.duration!=null&&g.duration>0){
     return `${g.count}×${fmtDur(g.duration)}`;
@@ -177,25 +183,15 @@ function fmtDur(s){
   if(s>=60)return`${Math.floor(s/60)}min ${s%60}s`;
   return`${s}s`;
 }
-function fmtMin(m){
+function fmtMin(m,axis){
   if(m==null||m===""||Number.isNaN(Number(m)))return"?";
-  const mm=Math.max(0,Math.floor(Number(m)));
+  const mm=Math.max(0,axis?Math.round(Number(m)):Math.floor(Number(m)));
   if(mm>=60){
     const h=Math.floor(mm/60);
     const rem=mm%60;
     return`${String(h).padStart(2,"0")}:${String(rem).padStart(2,"0")}`;
   }
-  return `${mm}min`;
-}
-function fmtMinAxis(m){
-  if(m==null||m===""||Number.isNaN(Number(m)))return"?";
-  const mm=Math.max(0,Math.round(Number(m)));
-  if(mm>=60){
-    const h=Math.floor(mm/60);
-    const rem=mm%60;
-    return`${String(h).padStart(2,"0")}:${String(rem).padStart(2,"0")}`;
-  }
-  return `${mm} min`;
+  return axis?`${mm} min`:`${mm}min`;
 }
 // sparkline mini-svg
 function spark(hist,key){
@@ -206,7 +202,7 @@ function spark(hist,key){
   const pts=vals.map((v,i)=>`${(i/(n-1)*W).toFixed(1)},${(H-((v-mn)/rng)*H).toFixed(1)}`).join(" ");
   const last=vals[vals.length-1],first=vals[0];
   const col=last>first?"#3fb950":last<first?"#f85149":"#6e7681";
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return `<svg class="spark" aria-hidden="true" viewBox="0 0 ${W} ${H}"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 
 function render(keepScroll){
@@ -232,7 +228,7 @@ function renderCal(app){
   });
   // krat notes
   let html=`<div class="krat"><h3>📡 Kratt märkab</h3>`;
-  DATA.krat_notes.forEach(n=>html+=`<div class="note">${n}</div>`);
+  DATA.krat_notes.forEach(n=>html+=`<div class="note">${escHtml(n)}</div>`);
   html+=`</div>`;
   // muscle balance bars
   html+=`<div class="card"><div class="title">⚖️ Lihasgrupi maht (4 näd)</div>`;
@@ -245,9 +241,9 @@ function renderCal(app){
   html+=`</div>`;
   // calendar
   if(view.calY==null){const last=DATA.workouts[0];const d=new Date(last.date);view.calY=d.getFullYear();view.calM=d.getMonth();}
-  html+=`<div class="card"><div class="calhdr"><button onclick="moveMonth(-1)">‹</button>
+  html+=`<div class="card"><div class="calhdr"><button onclick="moveMonth(-1)" aria-label="Eelmine kuu">‹</button>
     <div class="title" style="margin:0">${MONTHS[view.calM]} ${view.calY}</div>
-    <button onclick="moveMonth(1)">›</button></div><div class="calgrid">`;
+    <button onclick="moveMonth(1)" aria-label="Järgmine kuu">›</button></div><div class="calgrid">`;
   DOW.forEach(d=>html+=`<div class="cald dow">${d}</div>`);
   const first=new Date(view.calY,view.calM,1);
   let start=(first.getDay()+6)%7; // Mon=0
@@ -259,7 +255,7 @@ function renderCal(app){
     if(dayWs.length){
       const dayTypes=[...new Set(dayWs.map(w=>isCardioType(w.type)?w.type:(w.type==="kodune"?"kodune":"jõusaal")))];
       const primaryType=dayTypes[0];
-      const icons=dayTypes.slice(0,2).map(t=>`<span class="dot">${workoutIcon(t)}</span>`).join("");
+      const icons=dayTypes.slice(0,2).map(t=>`<span class="dot">${iconFor(t)}</span>`).join("");
       const more=dayTypes.length>2?`<span class="dot-more">+${dayTypes.length-2}</span>`:"";
       html+=`<div class="cald has ${primaryType}" onclick="openWorkout(${dayWs[0].id})">${d}<span class="dots">${icons}${more}</span></div>`;
     }else html+=`<div class="cald">${d}</div>`;
@@ -273,10 +269,10 @@ function renderCal(app){
       const type=isCardioType(w.type)?w.type:(w.type==="kodune"?"kodune":"jõusaal");
       counts[type]=(counts[type]||0)+1;
     });
-    html+=`<div class="card" style="padding:12px 16px"><div class="row" style="flex-wrap:wrap;gap:8px;justify-content:flex-start">`;
+    html+=`<div class="card pad-wide"><div class="row" style="flex-wrap:wrap;gap:8px;justify-content:flex-start">`;
     for(const[type,n]of Object.entries(counts)){
       html+=`<div style="display:flex;align-items:center;gap:5px;font-size:14px">
-        <span>${workoutIcon(type)}</span>
+        <span>${iconFor(type)}</span>
         <span style="font-weight:600">${n}×</span>
         <span class="muted">${type}</span>
       </div>`;
@@ -290,9 +286,9 @@ function renderCal(app){
     const meta=isCardio
       ? `${fmtDate(w.date)} · ${fmtMin(w.duration)}${w.distance_km?" · "+w.distance_km+"km":""}`
       : `${fmtDate(w.date)} · ${fmtMin(w.duration)} · ${w.volume}kg`;
-    const badge=isCardio?`<span class="chip" style="font-size:11px">${cardioIcon(w.type)}</span>`:prCount(w);
+    const badge=isCardio?`<span class="chip" style="font-size:11px">${iconFor(w.type)}</span>`:prCount(w);
     html+=`<div class="card tap" onclick="openWorkout(${w.id})"><div class="row">
-      <div><div class="title">${w.name||"Trenn"}</div><div class="muted">${meta}</div></div>
+      <div><div class="title">${escHtml(w.name||"Trenn")}</div><div class="muted">${meta}</div></div>
       <div style="text-align:right">${badge}</div></div></div>`;
   });
   app.innerHTML=html;
@@ -314,7 +310,7 @@ function renderWorkout(app){
   let html=``;
   if(isCardioType(w.type)){
     // Kardio vaade
-    html+=`<div class="card"><div style="text-align:center;font-size:36px;margin-bottom:8px">${cardioIcon(w.type)}</div>`;
+    html+=`<div class="card"><div style="text-align:center;font-size:36px;margin-bottom:8px">${iconFor(w.type)}</div>`;
     html+=`<div class="row" style="justify-content:space-around;text-align:center">`;
     if(w.distance_km)html+=`<div><div class="big">${w.distance_km}</div><div class="muted">km</div></div>`;
     html+=`<div><div class="big">${fmtMin(w.duration)}</div><div class="muted">aeg</div></div>`;
@@ -334,19 +330,19 @@ function renderWorkout(app){
   // insight
   if(w.insight){
     html+=`<div class="krat"><h3>📡 Kratt selle trenni kohta</h3>`;
-    w.insight.split("\n").forEach(l=>html+=`<div class="note">${l}</div>`);
+    w.insight.split("\n").forEach(l=>html+=`<div class="note">${escHtml(l)}</div>`);
     html+=`</div>`;
   }
   if(w.exercises&&w.exercises.length){
     // exercises
-    html+=`<div class="title" style="margin:16px 0 10px">Harjutused</div>`;
+    html+=`<div class="title mt-block">Harjutused</div>`;
     w.exercises.forEach(ex=>{
       const delta=exDelta(ex.name);
       const g0=(ex.groups&&ex.groups.length)?ex.groups[0]:null;
       const summary=g0?fmtSet(g0):"—";
       html+=`<div class="card tap exgroup" onclick="openExercise('${esc(ex.name)}')">
         <div class="row"><div class="setline" style="border:none;padding:0;flex:1">
-          <span class="exn">${ex.name}${delta}</span></div>
+          <span class="exn">${escHtml(ex.name)}${delta}</span></div>
           <span class="reps" style="margin-right:10px">${summary}</span>
           <span class="muted" style="font-size:18px">›</span></div>
       </div>`;
@@ -403,7 +399,7 @@ function renderExercise(app){
 
   // Staatus + rekord
   let html=infoHtml;
-  html+=`<div class="card" style="padding:12px 16px"><div class="row">
+  html+=`<div class="card pad-wide"><div class="row">
     <div style="display:flex;align-items:center;gap:8px">
       <span class="stat st-${st}">${STLABEL[st]||st}</span>
       ${ex.weeks_stuck&&st==="seisab"?`<span class="muted">~${ex.weeks_stuck} näd</span>`:""}
@@ -421,7 +417,7 @@ function renderExercise(app){
   html+=`<div class="card" style="padding:10px 12px"><div class="chart-box"><canvas id="exchart"></canvas></div></div>`;
 
   // Ajalugu
-  html+=`<div class="title" style="margin:16px 0 10px">Ajalugu</div><div class="card">`;
+  html+=`<div class="title mt-block">Ajalugu</div><div class="card">`;
   [...ex.history].reverse().forEach(h=>{
     let val;
     if(h.duration!=null&&h.duration>0)val=fmtDur(h.duration);
@@ -458,9 +454,9 @@ function drawChart(){
       borderColor:"#2f81f7",backgroundColor:"rgba(47,129,247,.1)",fill:true,tension:.3,
       pointRadius:5,pointBackgroundColor:"#2f81f7",spanGaps:true}]},
       options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>`Kestus: ${fmtMinAxis(i.parsed.y)}`}}},
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>`Kestus: ${fmtMin(i.parsed.y,true)}`}}},
         scales:{x:{grid:{color:"#1c2330"},ticks:{color:"#6e7681",maxRotation:45,font:{size:10}}},
-                y:{grid:{color:"#1c2330"},ticks:{color:"#6e7681",callback:v=>fmtMinAxis(v)}}}}});
+                y:{grid:{color:"#1c2330"},ticks:{color:"#6e7681",callback:v=>fmtMin(v,true)}}}}});
     return;
   }
 
@@ -572,10 +568,10 @@ function renderExList(app){
   Object.values(DATA.exercises).forEach(e=>{if(e.is_cardio)return;(byMuscle[e.muscle]=byMuscle[e.muscle]||[]).push(e);});
   let html="";
   for(const[mg,list]of Object.entries(byMuscle)){
-    html+=`<div class="title" style="margin:16px 0 10px;text-transform:capitalize">${mg}</div>`;
+    html+=`<div class="title mt-block" style="text-transform:capitalize">${mg}</div>`;
     list.forEach(e=>{
       html+=`<div class="exrow" onclick="openExercise('${esc(e.name)}')">
-        <div class="info"><div class="nm">${e.name}</div></div>
+        <div class="info"><div class="nm">${escHtml(e.name)}</div></div>
         ${spark(e.history,"weight")||spark(e.history,"reps")}
         <span class="stat st-${e.status}">${STLABEL[e.status]||e.status}</span></div>`;
     });
@@ -583,7 +579,8 @@ function renderExList(app){
   app.innerHTML=html;
 }
 
-function esc(s){return s.replace(/'/g,"\\'");}
+function esc(s){return escHtml(s.replace(/\\/g,"\\\\").replace(/'/g,"\\'"));}
+function escHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
 // nav
 document.getElementById("back").onclick=()=>{
   if(view.name==="exercise"){view.name=view.fromList?"exlist":"workout";render();}
@@ -591,10 +588,10 @@ document.getElementById("back").onclick=()=>{
 };
 // bottom nav
 const nav=document.createElement("div");
-nav.style.cssText="position:fixed;bottom:0;left:0;right:0;background:rgba(13,17,23,.95);backdrop-filter:blur(10px);border-top:1px solid var(--border);display:flex;z-index:60";
+nav.className="bottomnav";
 nav.innerHTML=`
-  <div class="navbtn" data-v="cal" style="flex:1;text-align:center;padding:12px;cursor:pointer">📅<div style="font-size:11px;margin-top:2px">Kalender</div></div>
-  <div class="navbtn" data-v="exlist" style="flex:1;text-align:center;padding:12px;cursor:pointer">💪<div style="font-size:11px;margin-top:2px">Harjutused</div></div>`;
+  <div class="navbtn" data-v="cal" role="button" tabindex="0" aria-label="Kalender">📅<div class="navlbl">Kalender</div></div>
+  <div class="navbtn" data-v="exlist" role="button" tabindex="0" aria-label="Harjutused">💪<div class="navlbl">Harjutused</div></div>`;
 document.body.appendChild(nav);
 nav.querySelectorAll(".navbtn").forEach(b=>b.onclick=()=>{
   const v=b.dataset.v;
@@ -607,7 +604,7 @@ openExercise=function(n){view.fromList=(view.name==="exlist");_openEx(n);};
 
 render();
 </script>
-<div style="position:fixed;top:6px;right:8px;font-size:10px;color:rgba(255,255,255,0.25);pointer-events:none;z-index:9999;">
+<div class="gen-stamp" aria-hidden="true">
   🕐 {{ generated }}
 </div>
 </body>

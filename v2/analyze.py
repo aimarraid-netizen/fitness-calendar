@@ -11,12 +11,12 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from db import get_db
-import queries as q
 import exercise_config as cfg
+import queries as q
+from db import get_db
 
 
-def exercise_status(sessions):
+def exercise_status(sessions: list[dict]) -> str:
     """Hinda harjutuse seis viimaste sessioonide põhjal.
 
     Tagastab: 'areneb' | 'seisab' | 'stabiilne' | 'regress' | 'uus' | 'vahetus'
@@ -109,7 +109,7 @@ STATUS_TEXT = {
 }
 
 
-def weeks_since_progress(sessions):
+def weeks_since_progress(sessions: list[dict]) -> int | None:
     """Mitu nädalat tagasi oli viimane areng (kaalu või korduste tõus)."""
     if len(sessions) < 2:
         return None
@@ -136,7 +136,7 @@ def weeks_since_progress(sessions):
     return d.days // 7
 
 
-def analyze_all_exercises(conn):
+def analyze_all_exercises(conn) -> dict[str, dict]:
     """Iga harjutuse staatus + nädalad arenguta."""
     out = {}
     for name in q.all_exercise_names(conn):
@@ -156,7 +156,7 @@ def analyze_all_exercises(conn):
     return out
 
 
-def muscle_balance(conn, weeks_back=4):
+def muscle_balance(conn, weeks_back: int = 4) -> dict[str, float]:
     """Lihasgrupi maht viimase N nädala jooksul."""
     wv = q.weekly_volume(conn)
     recent_weeks = list(wv.keys())[-weeks_back:]
@@ -169,7 +169,7 @@ def muscle_balance(conn, weeks_back=4):
     return dict(sorted(balance.items(), key=lambda x: -x[1]))
 
 
-def volume_trend(conn, weeks_back=6):
+def volume_trend(conn, weeks_back: int = 6) -> tuple[str, list]:
     """Kogumahu trend viimaste nädalate lõikes (kasvab/kahaneb/stabiilne)."""
     wv = q.weekly_volume(conn)
     weeks = list(wv.keys())[-weeks_back:]
@@ -190,7 +190,7 @@ def volume_trend(conn, weeks_back=6):
     return trend, totals
 
 
-def workout_insight(conn, workout_id):
+def workout_insight(conn, workout_id: int) -> str:
     """Mustripõhine tekst ühe trenni kohta — mida kasutaja ise ei näe.
 
     EI korda numbreid (kaal/kordused on tabelis). Toob esile:

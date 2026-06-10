@@ -16,7 +16,6 @@ Kasutus:
 """
 
 import argparse
-import csv as csv_module
 import json
 import os
 import sys
@@ -24,11 +23,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import anthropic
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).parent
+sys.path.insert(0, str(ROOT / 'v2'))
+import queries as q  # noqa: E402
+from db import get_db  # noqa: E402
+
+load_dotenv(ROOT / '.env')
+
 DATA_DIR = ROOT / 'data'
-HISTORY_FILE = DATA_DIR / 'workout_history.json'
-CSV_DIR = DATA_DIR / 'processed' / 'csv'
 SUMMARIES_FILE = DATA_DIR / 'week_summaries.json'
 KNOWLEDGE_FILE = ROOT / 'claude_project' / 'fitness_knowledge.md'
 INSTRUCTIONS_FILE = ROOT / 'claude_project' / 'TREENER_INSTRUCTIONS.md'
@@ -63,42 +67,36 @@ def save_summaries(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def load_gymaholic_workouts():
-    if not HISTORY_FILE.exists():
-        return []
-    with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    workouts = data['workouts'] if isinstance(data, dict) and 'workouts' in data else data
-    for w in workouts:
-        w['source'] = 'gymaholic'
-    return workouts
-
-
-def load_cardio_workouts():
-    workouts = []
-    if not CSV_DIR.exists():
-        return workouts
-    for csv_file in CSV_DIR.glob('*.csv'):
-        try:
-            with open(csv_file, 'r', encoding='utf-8') as f:
-                reader = csv_module.DictReader(f)
-                for row in reader:
-                    filename = csv_file.stem
-                    workouts.append({
-                        'source': 'workoutdoor',
-                        'timestamp': row.get('timestamp', ''),
-                        'workout_name': filename.split('_', 2)[2] if '_' in filename else 'Cardio',
-                        'workout_type': row.get('activity_type', 'cardio'),
-                        'duration_min': int(float(row.get('duration_sec', 0))) // 60,
-                        'distance_km': float(row.get('distance_m', 0)) / 1000,
-                        'avg_hr': int(float(row.get('avg_hr', 0))),
-                        'max_hr': int(float(row.get('max_hr', 0))),
-                        'kcal': int(float(row.get('calories', 0))),
-                        'z2_min': int(float(row.get('z2_min', 0) or 0)),
-                    })
-        except Exception as e:
-            print(f"Viga CSV lugemisel {csv_file}: {e}", file=sys.stderr)
-    return workouts
+def load_week_workouts(conn, start_str, end_str):
+    """Nädala trennid SQLite-st (üks tõeallikas): jõud + kardio."""
+    rows = conn.execute(
+        "SELECT * FROM workouts WHERE date BETWEEN ? AND ? ORDER BY timestamp",
+        (start_str, end_str),
+    ).fetchall()
+    out = []
+    for r in rows:
+        w = dict(r)
+        if w.get('source') in ('gymaholic', 'gymaholic_csv'):
+            w['kind'] = 'strength'
+            # top-harjutused mahu järgi (format_week näitab 3 parimat)
+            by_ex = {}
+            for s in q.workout_sets(conn, w['id']):
+                e = by_ex.setdefault(s['exercise_name'], {
+                    'name': s['exercise_name'], 'sets': 0, 'reps': 0,
+                    'weight_kg': 0, 'total_volume': 0.0,
+                })
+                e['sets'] += 1
+                e['total_volume'] += s['total_volume'] or 0.0
+                if (s['weight_kg'] or 0) >= e['weight_kg']:
+                    e['weight_kg'] = s['weight_kg'] or 0
+                    e['reps'] = s['reps'] or 0
+            w['exercises'] = list(by_ex.values())
+        else:
+            w['kind'] = 'cardio'
+            w['distance_km'] = (w.get('distance_m') or 0) / 1000
+            w['z2_min'] = int(w.get('z2_min') or 0)
+        out.append(w)
+    return out
 
 
 def workout_date(w):
@@ -108,8 +106,8 @@ def workout_date(w):
 
 def format_week(workouts, week_start, week_end):
     lines = [f"**Nädal:** {week_start} kuni {week_end}\n"]
-    strength = [w for w in workouts if w['source'] == 'gymaholic']
-    cardio = [w for w in workouts if w['source'] == 'workoutdoor']
+    strength = [w for w in workouts if w['kind'] == 'strength']
+    cardio = [w for w in workouts if w['kind'] == 'cardio']
 
     lines.append(f"**Kokku:** {len(strength)} jõutrenni + {len(cardio)} kardiot = {len(workouts)} treeningut\n")
 
@@ -118,8 +116,8 @@ def format_week(workouts, week_start, week_end):
         for w in sorted(strength, key=lambda x: x.get('timestamp', '')):
             date = workout_date(w)
             name = w.get('workout_name', '?')
-            dur = w.get('duration_min', w.get('duration', 0) // 60)
-            vol = w.get('total_volume', 0)
+            dur = w.get('duration_min') or 0
+            vol = w.get('total_volume') or 0
             top = ''
             if w.get('exercises'):
                 top_exs = sorted(w['exercises'], key=lambda e: e.get('total_volume', 0), reverse=True)[:3]
@@ -132,11 +130,11 @@ def format_week(workouts, week_start, week_end):
         total_z2 = 0
         for w in sorted(cardio, key=lambda x: x.get('timestamp', '')):
             date = workout_date(w)
-            wtype = w.get('workout_type', 'cardio')
-            dur = w.get('duration_min', 0)
-            dist = w.get('distance_km', 0)
-            hr = w.get('avg_hr', 0)
-            z2 = w.get('z2_min', 0)
+            wtype = w.get('workout_type') or 'cardio'
+            dur = w.get('duration_min') or 0
+            dist = w.get('distance_km') or 0
+            hr = w.get('avg_hr') or 0
+            z2 = w.get('z2_min') or 0
             total_z2 += z2
             dist_str = f", {dist:.1f}km" if dist > 0 else ""
             hr_str = f", HR {hr}" if hr > 0 else ""
@@ -188,10 +186,11 @@ def main():
     knowledge = KNOWLEDGE_FILE.read_text(encoding='utf-8')
     instructions = INSTRUCTIONS_FILE.read_text(encoding='utf-8')
 
-    all_workouts = load_gymaholic_workouts() + load_cardio_workouts()
     start_str = start.strftime('%Y-%m-%d')
     end_str = end.strftime('%Y-%m-%d')
-    week_workouts = [w for w in all_workouts if start_str <= workout_date(w) <= end_str]
+    conn = get_db()
+    week_workouts = load_week_workouts(conn, start_str, end_str)
+    conn.close()
 
     if not week_workouts:
         print(f"Nädalal {start_str} – {end_str} trenne ei leidnud.")

@@ -21,13 +21,18 @@ Reeglid:
     - aasta puudub kuupäevast -> tuleta jooksvast
 """
 import re
+import shutil
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from db import get_db, init_schema
 import exercise_config as cfg
+from db import get_db, init_schema
+from validation import ValidationError, valid_reps, valid_weight
+
+ROOT = Path(__file__).parent.parent
+FAILED = ROOT / "data" / "failed"
 
 MONTHS = {
     "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
@@ -38,24 +43,34 @@ MONTHS = {
 SET_RE = re.compile(r"([\d.]+)\s*kg\s*x\s*(\d+)", re.IGNORECASE)
 
 
-def _parse_date(raw, now=None):
-    """'May 21., 15:55' -> datetime. Aasta tuletatakse jooksvast."""
+def _parse_date(raw: str, now: datetime | None = None) -> datetime | None:
+    """'May 21., 15:55' -> datetime. Aasta tuletatakse jooksvast.
+
+    Trenn ei saa olla tulevikus: kui kuupäev jooksva aastaga oleks rohkem kui
+    2 päeva ees, on tegu eelmise aasta trenniga (nt detsembri eksport jaanuaris).
+    Parseerimatu kuupäev -> None (kutsuja otsustab, mitte vaikselt vale kuupäev).
+    """
     now = now or datetime.now()
     raw = raw.strip()
     m = re.match(r"([A-Za-z]+)\s+(\d+)\.?,?\s*(\d+):(\d+)", raw)
     if not m:
-        return now
-    mon = MONTHS.get(m.group(1)[:3].lower(), now.month)
+        return None
+    mon = MONTHS.get(m.group(1)[:3].lower())
+    if mon is None:
+        return None
     day = int(m.group(2))
     hh, mm = int(m.group(3)), int(m.group(4))
-    year = now.year
-    # kui kuu on tulevikus jooksva kuu suhtes -> eelmine aasta
-    if mon > now.month + 1:
-        year -= 1
-    return datetime(year, mon, day, hh, mm)
+    for year in (now.year, now.year - 1):
+        try:
+            candidate = datetime(year, mon, day, hh, mm)
+        except ValueError:  # nt 29. veebruar mitteliigaastal
+            continue
+        if candidate <= now + timedelta(days=2):
+            return candidate
+    return None
 
 
-def _parse_duration(raw):
+def _parse_duration(raw: str) -> int | None:
     """'0h:58m' -> minutid."""
     m = re.match(r"(\d+)h:(\d+)m", raw.strip())
     if m:
@@ -74,7 +89,7 @@ def _workout_type(name):
     return "jõusaal"
 
 
-def parse_csv(path):
+def parse_csv(path) -> dict:
     """Parsi CSV -> dict (workout meta + exercises list)."""
     lines = Path(path).read_text(encoding="utf-8").splitlines()
     meta = {"name": None, "date": None, "duration_min": None,
@@ -153,10 +168,14 @@ def _rep_range(raw):
     return None, None
 
 
-def save_to_db(parsed, conn):
+def save_to_db(parsed: dict, conn) -> tuple[int, str, str]:
     """Kirjuta parsitud trenn SQLite-i. Idempotentne (INSERT OR IGNORE)."""
     meta = parsed["meta"]
-    dt = meta["date"] or datetime.now()
+    if meta["date"] is None:
+        raise ValidationError("kuupäev puudub või on parseerimatu")
+    if not parsed["exercises"]:
+        raise ValidationError("ühtegi harjutust ei leitud")
+    dt = meta["date"]
     timestamp = dt.strftime("%Y-%m-%d %H:%M:%S")
     date = dt.strftime("%Y-%m-%d")
     wtype = _workout_type(meta["name"] or "")
@@ -193,6 +212,10 @@ def save_to_db(parsed, conn):
         for i, s in enumerate(ex["sets"], 1):
             w = s.get("weight")
             reps = s.get("reps")
+            if not valid_reps(reps) or not valid_weight(w):
+                print(f"  HOIATUS: {name} seeria {i} vigane (reps={reps}, kaal={w}), "
+                      "jätan vahele", file=sys.stderr)
+                continue
             vol = (w * reps) if (w and reps) else 0.0
             conn.execute(
                 """INSERT INTO sets
@@ -223,12 +246,24 @@ def main():
         sys.exit(1)
     conn = get_db()
     init_schema(conn)
+    ok = 0
     for path in sys.argv[1:]:
-        parsed = parse_csv(path)
-        wid, date, name = save_to_db(parsed, conn)
+        try:
+            parsed = parse_csv(path)
+            wid, date, name = save_to_db(parsed, conn)
+        except Exception as e:
+            FAILED.mkdir(parents=True, exist_ok=True)
+            src = Path(path)
+            if src.exists():
+                shutil.move(str(src), str(FAILED / src.name))
+            print(f"✗ {src.name}: {e} — liigutatud failed/", file=sys.stderr)
+            continue
+        ok += 1
         nsets = sum(len(e["sets"]) for e in parsed["exercises"])
         print(f"✓ {date} {name}: {len(parsed['exercises'])} harjutust, {nsets} seeriat (id={wid})")
     conn.close()
+    if ok == 0:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

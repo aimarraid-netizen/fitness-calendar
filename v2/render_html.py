@@ -8,10 +8,10 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from db import get_db
-import queries as q
 import analyze as a
 import exercise_config as cfg
+import queries as q
+from db import get_db
 
 OUT = Path(__file__).parent.parent / "index.html"
 TEMPLATE = Path(__file__).parent / "template.html"

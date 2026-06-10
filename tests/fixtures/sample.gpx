@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1"
+     xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1"
+     version="1.1" creator="test">
+  <trk>
+    <name>Õhtune kõnd</name>
+    <type>walking</type>
+    <trkseg>
+      <trkpt lat="59.4370" lon="24.7536"><ele>10.0</ele><time>2026-06-01T18:00:00Z</time>
+        <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>135</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions></trkpt>
+      <trkpt lat="59.4380" lon="24.7546"><ele>12.0</ele><time>2026-06-01T18:02:00Z</time>
+        <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>136</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions></trkpt>
+      <trkpt lat="59.4390" lon="24.7556"><ele>11.0</ele><time>2026-06-01T18:04:00Z</time>
+        <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>138</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions></trkpt>
+      <trkpt lat="59.4400" lon="24.7566"><ele>15.0</ele><time>2026-06-01T18:06:00Z</time>
+        <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>140</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions></trkpt>
+      <trkpt lat="59.4410" lon="24.7576"><ele>14.0</ele><time>2026-06-01T18:08:00Z</time>
+        <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>137</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions></trkpt>
+      <trkpt lat="59.4420" lon="24.7586"><ele>16.0</ele><time>2026-06-01T18:10:00Z</time>
+        <extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>139</gpxtpx:hr></gpxtpx:TrackPointExtension></extensions></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

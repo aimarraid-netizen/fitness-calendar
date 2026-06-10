@@ -4,11 +4,11 @@ Do not read, touch or access anything outside of this directory.
 
 # Trenn 2.0 — Arhitektuur (ümber tehtud 2026-05-22)
 
-**Vana n8n + rclone + Google Drive pipeline on PENSIONIL.** Uus süsteem on SQLite-põhine, Kratt orkestreerib otse Telegramist.
+**Vana n8n + rclone + Google Drive pipeline on PENSIONIL** (rclone samm eemaldatud pipeline.sh-st 2026-06-10). Uus süsteem on SQLite-põhine, Kratt orkestreerib otse Discordist.
 
 ## Andmevoog
 ```
-Trenni järel: jaga Gymaholicu ÜKSIK-TRENNI CSV otse Telegrami Kratile
+Trenni järel: jaga Gymaholicu ÜKSIK-TRENNI CSV otse Discordis Kratile
   → v2/parse_gymaholic_csv.py  (parse + valideeri)
   → data/trenn.db              (SQLite, üks tõeallikas)
   → v2/render_html.py          (mobile-first HTML)
@@ -17,7 +17,7 @@ Trenni järel: jaga Gymaholicu ÜKSIK-TRENNI CSV otse Telegrami Kratile
 Kardio: FIT-fail → v2/parse_fit.py
 Kardio: GPX/XML → v2/parse_gpx.py
 
-Lives trenni ajal (Kratt Telegramis):
+Lives trenni ajal (Kratt Discordis):
   → v2/kratt_tools.py last/history   ("mis oli eelmine bench?")
   → v2/kratt_tools.py equip/note     ("Face Pull täna masin")
 ```
@@ -25,7 +25,9 @@ Lives trenni ajal (Kratt Telegramis):
 ## v2/ moodulid
 - `db.py` — SQLite skeem + ühendus. **NULL-kaal ≠ 0kg** (TRX/kehakaal/puuduv)
 - `exercise_config.py` — vaikevarustus, lihasgrupp iga harjutuse kohta
-- `migrate.py` — vana JSON → SQLite (juba jooksnud, 37 trenni)
+- `hr_config.py` — pulsitsoonid (Karvonen, RESTING_HR/MAX_HR .env-ist) — jagatud FIT+GPX parserite vahel
+  (NB: `migrate.py` on eemaldatud 2026-06-10 — ühekordne JSON→SQLite migratsioon on tehtud, vanad JSON-id `backups/legacy-json-2026-06/`)
+- `validation.py` — sisendpiirid (reps, kaal, pulss, distants); vigased seeriad jäetakse vahele
 - `parse_gymaholic_csv.py` — üksik-trenni CSV parser (`;`-eraldatud, kaal kilodes, rep-vahemikud inline)
 - `queries.py` — taaskasutatav päringukiht
 - `analyze.py` — **progressioon-teadlik** analüüs (kaal↑+kordused↓=areng; varustusvahetus=neutraalne)
@@ -58,6 +60,6 @@ Legacy v1 skriptid on eemaldatud. Kasuta ainult `v2/` mooduleid ja `pipeline.sh`
 
 ## Conventions
 - Vasta eesti keeles
-- Sisend = üksik-trenni CSV otse Telegrami (EI Google Drive)
+- Sisend = üksik-trenni CSV otse Discordi Kratile (EI Google Drive)
 - Idempotentsus: sama fail 2× ei tee duplikaate (INSERT OR IGNORE + DELETE+reinsert seeriatele)
 - Enne suuri muudatusi: backup data/trenn.db

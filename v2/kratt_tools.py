@@ -1,6 +1,6 @@
 """Kratti tööriistad — read/write API trenni andmebaasi vastu.
 
-Kratt kasutab neid Telegrami vestluses:
+Kratt kasutab neid Discordi vestluses:
   - lives trenni ajal: get_last(), get_history() ("mis oli eelmine bench?")
   - kohe peale seeriat: set_equipment() ("Face Pull täna masin"), add_note()
   - trenni järel: import_csv() (jaga fail -> baasi -> HTML)
@@ -15,9 +15,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from db import get_db
-import queries as q
 import exercise_config as cfg
+import queries as q
+from db import get_db
 
 
 def get_last(conn, exercise):
@@ -106,10 +106,6 @@ def set_duration(conn, exercise, seconds, date=None, sets=None):
     if not wrow:
         return f"{exercise}: pole andmeid ({date or 'uusim'})"
     wid = wrow["id"]
-    existing = conn.execute(
-        "SELECT id FROM sets WHERE exercise_name=? AND workout_id=? ORDER BY set_number",
-        (exercise, wid),
-    ).fetchall()
     if sets is not None:
         # taasta täpne seeriate arv
         conn.execute("DELETE FROM sets WHERE exercise_name=? AND workout_id=?", (exercise, wid))
@@ -187,7 +183,8 @@ def import_gpx(conn, gpx_path):
 
 def import_zip(conn, zip_path):
     """Pakib ZIP lahti, impordib seest leitud .fit, .gpx ja .csv failid."""
-    import zipfile, tempfile
+    import tempfile
+    import zipfile
     results = []
     with zipfile.ZipFile(zip_path) as zf:
         with tempfile.TemporaryDirectory() as tmp:
@@ -199,12 +196,17 @@ def import_zip(conn, zip_path):
             csv_files = list(tmp.rglob("*.csv"))
             if not any([fit_files, gpx_files, xml_files, csv_files]):
                 return "❌ ZIP-is ei leitud ühtegi .fit/.gpx/.xml/.csv faili"
-            for fp in fit_files:
-                results.append(import_fit(conn, fp))
-            for fp in gpx_files + xml_files:
-                results.append(import_gpx(conn, fp))
-            for fp in csv_files:
-                results.append(import_csv(conn, fp))
+            # Üks vigane fail ei tohi katkestada ülejäänud ZIP-i importi
+            for importer, files in ((import_fit, fit_files),
+                                    (import_gpx, gpx_files + xml_files),
+                                    (import_csv, csv_files)):
+                for fp in files:
+                    try:
+                        results.append(importer(conn, fp))
+                    except Exception as e:
+                        import traceback
+                        traceback.print_exc(file=sys.stderr)
+                        results.append(f"❌ {fp.name}: {e}")
     return "\n".join(results)
 
 
@@ -237,15 +239,23 @@ if __name__ == "__main__":
         print(set_duration(conn, sys.argv[2], secs, date, sets))
     elif cmd == "import":
         p = Path(sys.argv[2])
-        if p.suffix.lower() == ".zip":
-            print(import_zip(conn, p))
-        elif p.suffix.lower() == ".fit":
-            print(import_fit(conn, p))
-        elif p.suffix.lower() in (".gpx", ".xml"):
-            print(import_gpx(conn, p))
-        else:
-            print(import_csv(conn, p))
-        regen_html()
+        try:
+            if p.suffix.lower() == ".zip":
+                result = import_zip(conn, p)
+            elif p.suffix.lower() == ".fit":
+                result = import_fit(conn, p)
+            elif p.suffix.lower() in (".gpx", ".xml"):
+                result = import_gpx(conn, p)
+            else:
+                result = import_csv(conn, p)
+        except Exception as e:
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            result = f"❌ Import ebaõnnestus: {e}"
+        print(result)
+        # HTML uuendub, kui vähemalt midagi õnnestus
+        if not result.startswith("❌"):
+            regen_html()
     else:
         print(__doc__)
     conn.close()

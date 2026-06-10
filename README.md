@@ -1,122 +1,46 @@
-# Fitness Data Pipeline
+# Trenn 2.0 — treeningute analüüs
 
-Automatiseeritud treeninguandmete töötlemine Google Drive'ist Discord kanalisse.
+Gymaholicu üksik-trenni CSV + FIT/GPX kardiofailid → SQLite → mobile-first HTML → GitHub Pages.
+Kratt (Discordi bot) orkestreerib: failid jõuavad `data/incoming/` kausta või otse `v2/kratt_tools.py import` kaudu.
+
+**Live:** https://aimarraid-netizen.github.io/trenn-d8b4c9a1/
 
 ## Kiirjuhend
 
-### 1. Installeeri sõltuvused
-
 ```bash
-cd ~/trenn
-
-# Python paketid
-pip3 install --user -r requirements.txt
-
-# rclone (kui puudub)
-sudo apt-get install rclone
-```
-
-### 2. Seadista rclone
-
-```bash
-./setup_rclone.sh
-```
-
-Järgi juhiseid Google Drive autentimiseks.
-
-### 3. Loo .env fail
-
-```bash
-cp .env.example .env
-nano .env
-```
-
-Täida:
-- `ANTHROPIC_API_KEY` - võti https://console.anthropic.com
-- `DISCORD_WEBHOOK_URL` - Discord → Server Settings → Integrations → Webhooks
-- `DISCORD_BOT_TOKEN` - Discord bot token (vaata DISCORD_BOT_SETUP.md)
-
-### 4. Testi pipeline'i
-
-```bash
-# Käsitsi sync test
-rclone sync gdrive:_trenni_data data/incoming/ --dry-run
-
-# Täis pipeline test
-./watch.sh
-```
-
-### 5. Seadista Discord Bot (valikuline)
-
-Interaktiivne bot käskude jaoks (`!stats`, `!last`, jne):
-
-```bash
-# Vaata täielikku juhendit
-cat DISCORD_BOT_SETUP.md
-
-# Käivita bot
-python3 bot.py
-```
-
-### 6. Seadista automaatika (cron)
-
-```bash
-crontab -e
-```
-
-Lisa rida:
-```
-*/15 * * * * cd /home/aimar/trenn && /home/aimar/trenn/watch.sh >> /home/aimar/trenn/logs/watch.log 2>&1
+cd ~/projects/trenn
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt      # + requirements-dev.txt arenduseks
+cp .env.example .env                          # täida ANTHROPIC_API_KEY, RESTING_HR, MAX_HR
 ```
 
 ## Töövoog
 
-1. ✅ Teen trenni
-2. ✅ Ekspordin Gymaholic/Workoutdoor → Google Drive (`_trenni_data` kaust)
-3. ✅ Cron (iga 15min) käivitab `watch.sh`
-4. ✅ Pipeline sünkroniseerib, konverteerib, analüüsib
-5. ✅ **Saan Discord notifikatsiooni analüüsiga!**
+1. Trenni järel: jaga Gymaholicu CSV (või FIT/GPX/ZIP) Discordis Kratile
+2. Kratt: `v2/kratt_tools.py import <fail>` või fail `data/incoming/` + `bash pipeline.sh`
+3. Pipeline: parse → SQLite (`data/trenn.db`) → analüüs → `index.html`
+4. `smart_git_commit.sh` push'ib → GitHub Pages deploy (automaatne Actions)
+5. Pühapäeviti: `weekly_summary.py` genereerib Claude API-ga nädala kokkuvõtte
 
 ## Failid
 
-- `pipeline.sh` - v2 orkestrator (ZIP/FIT/GPX -> SQLite -> HTML)
-- `v2/parse_gymaholic_csv.py` - Gymaholic CSV parser
-- `v2/parse_fit.py` - FIT importer
-- `v2/parse_gpx.py` - GPX/XML importer
-- `v2/render_html.py` - HTML generaator
-- `v2/analyze.py` - analüüs
+- `pipeline.sh` — v2 orkestrator (ZIP/FIT/GPX → SQLite → HTML), lukustusega, idempotentne
+- `v2/parse_gymaholic_csv.py` — Gymaholic CSV parser
+- `v2/parse_fit.py` / `v2/parse_gpx.py` — kardio importerid (pulsitsoonid `v2/hr_config.py`)
+- `v2/analyze.py` — progressioon-teadlik analüüs
+- `v2/render_html.py` + `v2/template.html` — HTML generaator
+- `v2/kratt_tools.py` — Kratti read/write CLI
+- `weekly_summary.py` — nädala kokkuvõte (Claude API, loeb SQLite-st)
 
-## Andmed
+## Testid
 
-- `data/incoming/` - Google Drive sync sihtkoht
-- `data/processed/csv/` - Konverteeritud CSV-d
-- `data/processed/fit/` - Arhiveeritud FIT failid
-- `data/charts/` - Genereeritud graafikud
-- `data/workout_history.json` - Treeningu ajalugu
-
-## Logid
-
-- `logs/watch.log` - Üldine käivitamise logi
-- `logs/error.log` - Veateatised
-- `logs/processed_files.log` - SHA256 hash tracking (duplikaatide vältimine)
-- `logs/rclone.log` - rclone sync detailid
+```bash
+venv/bin/pytest
+venv/bin/ruff check v2 tests weekly_summary.py
+```
 
 ## Tõrkeotsing
 
-**"ANTHROPIC_API_KEY puudub"**
-→ Kontrolli `.env` faili olemasolu ja sisu
-
-**"rclone 'gdrive' remote puudub"**
-→ Käivita `./setup_rclone.sh`
-
-**"Discord webhook ebaõnnestus"**
-→ Kontrolli webhook URL-i õigsust (Discord → Integrations)
-
-**"FIT parsing error"**
-→ Fail võib olla rikutud, liigub automaatselt `data/failed/` kausta
-
-## Tugi
-
-Küsimuste korral vaata:
-- Logi faile: `logs/`
-- Plaani faili: `~/.claude/plans/optimized-greeting-koala.md`
+- **"ANTHROPIC_API_KEY puudub"** → kontrolli `.env` faili
+- **Parse error** → fail liigub automaatselt `data/failed/`, põhjus `logs/pipeline.log`-is
+- **Pipeline JSON `status:error`** → vaata `logs/pipeline.log`; Kratt edastab vea Discordi

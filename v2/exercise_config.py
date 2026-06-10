@@ -91,17 +91,17 @@ TIME_BASED = {
 }
 
 
-def equipment_for(name):
+def equipment_for(name: str) -> str | None:
     return DEFAULT_EQUIPMENT.get(name)
 
 
-def muscle_for(name):
+def muscle_for(name: str) -> str:
     return MUSCLE_GROUP.get(name, "muu")
 
 
-def is_cardio(name):
+def is_cardio(name: str) -> bool:
     return name in CARDIO_EXERCISES
 
 
-def is_time_based(name):
+def is_time_based(name: str) -> bool:
     return name in TIME_BASED

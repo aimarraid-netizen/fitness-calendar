@@ -5,14 +5,15 @@ Idempotentsus: sama timestamp + workout_name ei lisa duplikaati.
 Kasutus:
     python3 v2/parse_fit.py <fail.fit> [--all-incoming] [--also-processed]
 """
-import sys
 import shutil
-import os
+import sys
+from datetime import datetime
 from pathlib import Path
-from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent))
-from db import get_db, init_schema
+import validation as val
+from db import ensure_columns, get_db, init_schema
+from hr_config import zone_minutes
 
 try:
     from fitparse import FitFile
@@ -35,29 +36,6 @@ SPORT_MAP = {
     "other": "kardio",
 }
 
-# Pulsitsoonid Karvonen valemiga
-RESTING_HR = int(os.getenv("RESTING_HR", 62))
-MAX_HR = int(os.getenv("MAX_HR", 179))
-
-
-def _hr_zones():
-    hrr = MAX_HR - RESTING_HR
-    return {
-        "z1": (RESTING_HR + int(hrr * 0.50), RESTING_HR + int(hrr * 0.60)),
-        "z2": (RESTING_HR + int(hrr * 0.60), RESTING_HR + int(hrr * 0.70)),
-        "z3": (RESTING_HR + int(hrr * 0.70), RESTING_HR + int(hrr * 0.80)),
-        "z4": (RESTING_HR + int(hrr * 0.80), RESTING_HR + int(hrr * 0.90)),
-        "z5": (RESTING_HR + int(hrr * 0.90), MAX_HR),
-    }
-
-
-def _get_zone(hr, zones):
-    for name, (lo, hi) in zones.items():
-        if lo <= hr <= hi:
-            return name
-    return "z1" if hr < zones["z1"][0] else "z5"
-
-
 def parse_fit(fit_path: Path) -> dict | None:
     """Parsi FIT fail, tagasta dict workouts-tabeli jaoks + zone_min."""
     try:
@@ -66,7 +44,6 @@ def parse_fit(fit_path: Path) -> dict | None:
         print(f"  ERROR: FIT lugemine ebaõnnestus — {e}", file=sys.stderr)
         return None
 
-    zones = _hr_zones()
     data = {
         "timestamp": None,
         "sport": "generic",
@@ -110,19 +87,18 @@ def parse_fit(fit_path: Path) -> dict | None:
                 hr_samples.append(int(f.value))
 
     if data["timestamp"] is None:
-        data["timestamp"] = datetime.now()
+        print("  ERROR: FIT-failis puudub start_time", file=sys.stderr)
+        return None
 
-    # Arvuta tsoonid
-    zone_min = {z: 0.0 for z in ("z1", "z2", "z3", "z4", "z5")}
-    if hr_samples and data["duration_sec"]:
-        counts = {z: 0 for z in zone_min}
-        for hr in hr_samples:
-            counts[_get_zone(hr, zones)] += 1
-        total = len(hr_samples)
-        for z in counts:
-            zone_min[z] = round((counts[z] / total) * (data["duration_sec"] / 60), 1)
+    # Mõistlikkuse kontroll: piiridest väljas väärtus -> NULL + hoiatus
+    for field, check in (("avg_hr", val.valid_hr), ("max_hr_val", val.valid_hr),
+                         ("distance_m", val.valid_distance_m), ("kcal", val.valid_kcal)):
+        if not check(data[field]):
+            print(f"  HOIATUS: {field}={data[field]} piiridest väljas, jätan tühjaks",
+                  file=sys.stderr)
+            data[field] = None
 
-    data["zone_min"] = zone_min
+    data["zone_min"] = zone_minutes(hr_samples, data["duration_sec"])
     return data
 
 
@@ -151,12 +127,12 @@ def insert_workout(conn, fit_path: Path, data: dict) -> tuple[bool, int | None]:
     cur = conn.execute(
         """INSERT INTO workouts
            (timestamp, date, workout_name, workout_type,
-            duration_min, distance_m, avg_hr, kcal, source)
-           VALUES (?,?,?,?,?,?,?,?,?)""",
+            duration_min, distance_m, avg_hr, kcal, z2_min, source)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
         (
             ts_str, date_str, workout_name, sport_et,
             duration_min, data.get("distance_m"), data.get("avg_hr"),
-            data.get("kcal"), "fit",
+            data.get("kcal"), data.get("zone_min", {}).get("z2"), "fit",
         ),
     )
     conn.commit()
@@ -181,10 +157,17 @@ def process_file(fit_path: Path, conn, archive: bool = True) -> str:
     if data is None:
         FAILED.mkdir(parents=True, exist_ok=True)
         shutil.move(str(fit_path), str(FAILED / fit_path.name))
-        print(f"  ✗ Parsimisveaga — liigutatud failed/")
+        print("  ✗ Parsimisveaga — liigutatud failed/")
         return "failed"
 
-    added, wid = insert_workout(conn, fit_path, data)
+    try:
+        added, wid = insert_workout(conn, fit_path, data)
+    except Exception as e:
+        FAILED.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(fit_path), str(FAILED / fit_path.name))
+        print(f"  ✗ DB kirjutamine ebaõnnestus ({e}) — liigutatud failed/", file=sys.stderr)
+        return "failed"
+
     sport_et = SPORT_MAP.get(data["sport"], data["sport"])
     dist = f"{data['distance_m']/1000:.1f} km" if data.get("distance_m") else "?"
     if data.get("duration_sec"):
@@ -206,15 +189,6 @@ def process_file(fit_path: Path, conn, archive: bool = True) -> str:
     return "added" if added else "duplicate"
 
 
-def ensure_distance_column(conn):
-    """Lisa distance_m veerg workouts tabelisse kui puudub."""
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(workouts)")]
-    if "distance_m" not in cols:
-        conn.execute("ALTER TABLE workouts ADD COLUMN distance_m REAL")
-        conn.commit()
-        print("  ✓ Lisatud veerg: workouts.distance_m")
-
-
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="FIT-failide importer Trenn 2.0 SQLite-sse")
@@ -226,7 +200,7 @@ def main():
 
     conn = get_db()
     init_schema(conn)
-    ensure_distance_column(conn)
+    ensure_columns(conn)
 
     files = []
     if args.all_incoming:

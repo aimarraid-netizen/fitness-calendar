@@ -1,20 +1,22 @@
 """Trenn 2.0 — GPX/XML-faili parser → SQLite.
 
 Toetab Strava GPX eksporti (ja GPX 1.1 üldiselt).
-Tunneb ka .xml laiendiga faile (Telegram ei luba .gpx, aga .xml läheb läbi).
+Tunneb ka .xml laiendiga faile (osa rakendusi ei luba .gpx jagamist, aga .xml läheb läbi).
 
 Kasutus:
     python3 v2/parse_gpx.py <fail.gpx|fail.xml> [--all-incoming]
 """
-import sys
-import shutil
 import math
+import shutil
+import sys
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from db import get_db, init_schema
+import validation as val
+from db import ensure_columns, get_db, init_schema
+from hr_config import zone_minutes
 
 ROOT = Path(__file__).parent.parent
 INCOMING = ROOT / "data" / "incoming"
@@ -34,10 +36,6 @@ SPORT_MAP = {
     "generic": "kardio",
     "other": "kardio",
 }
-
-RESTING_HR = 62
-MAX_HR = 179
-
 
 def _haversine(lat1, lon1, lat2, lon2):
     R = 6371000
@@ -155,17 +153,32 @@ def parse_gpx(gpx_path: Path) -> dict | None:
     avg_hr = round(sum(hr_samples) / len(hr_samples)) if hr_samples else None
     max_hr_val = max(hr_samples) if hr_samples else None
 
-    return {
-        "timestamp": start_time or datetime.now(),
+    if start_time is None:
+        print("  ERROR: GPX-is puuduvad ajatemplid", file=sys.stderr)
+        return None
+
+    data = {
+        "timestamp": start_time,
         "sport": sport_raw,
         "track_name": track_name,
         "duration_sec": duration_sec,
-        "distance_m": distance_m,
+        "distance_m": distance_m or None,
         "avg_hr": avg_hr,
         "max_hr_val": max_hr_val,
         "kcal": None,           # GPX ei kanna kaloreid
         "ascent_m": int(ascent_m) if ascent_m else None,
+        "zone_min": zone_minutes(hr_samples, duration_sec),
     }
+
+    # Mõistlikkuse kontroll: piiridest väljas väärtus -> NULL + hoiatus
+    for field, check in (("avg_hr", val.valid_hr), ("max_hr_val", val.valid_hr),
+                         ("distance_m", val.valid_distance_m)):
+        if not check(data[field]):
+            print(f"  HOIATUS: {field}={data[field]} piiridest väljas, jätan tühjaks",
+                  file=sys.stderr)
+            data[field] = None
+
+    return data
 
 
 def insert_workout(conn, gpx_path: Path, data: dict) -> tuple[bool, int | None]:
@@ -187,12 +200,12 @@ def insert_workout(conn, gpx_path: Path, data: dict) -> tuple[bool, int | None]:
     cur = conn.execute(
         """INSERT INTO workouts
            (timestamp, date, workout_name, workout_type,
-            duration_min, distance_m, avg_hr, kcal, source)
-           VALUES (?,?,?,?,?,?,?,?,?)""",
+            duration_min, distance_m, avg_hr, kcal, z2_min, source)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
         (
             ts_str, date_str, workout_name, sport_et,
             duration_min, data.get("distance_m"), data.get("avg_hr"),
-            data.get("kcal"), "gpx",
+            data.get("kcal"), data.get("zone_min", {}).get("z2"), "gpx",
         ),
     )
     conn.commit()
@@ -218,7 +231,14 @@ def process_file(gpx_path: Path, conn, archive: bool = True) -> str:
         print("  ✗ Parsimisveaga — liigutatud failed/")
         return "failed"
 
-    added, wid = insert_workout(conn, gpx_path, data)
+    try:
+        added, wid = insert_workout(conn, gpx_path, data)
+    except Exception as e:
+        FAILED.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(gpx_path), str(FAILED / gpx_path.name))
+        print(f"  ✗ DB kirjutamine ebaõnnestus ({e}) — liigutatud failed/", file=sys.stderr)
+        return "failed"
+
     sport_et = SPORT_MAP.get(data["sport"], data["sport"])
     dist = f"{data['distance_m']/1000:.1f} km" if data.get("distance_m") else "?"
     if data.get("duration_sec"):
@@ -249,12 +269,7 @@ def main():
 
     conn = get_db()
     init_schema(conn)
-
-    # Veendu et distance_m veerg on olemas
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(workouts)")]
-    if "distance_m" not in cols:
-        conn.execute("ALTER TABLE workouts ADD COLUMN distance_m REAL")
-        conn.commit()
+    ensure_columns(conn)
 
     files = []
     if args.all_incoming:

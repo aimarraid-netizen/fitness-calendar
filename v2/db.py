@@ -56,7 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_workouts_date ON workouts(date);
 """
 
 
-def get_db(db_path=None):
+def get_db(db_path=None) -> "sqlite3.Connection":
     """Tagasta sqlite3 ühendus foreign_keys=ON ja Row factory'ga."""
     path = Path(db_path) if db_path else DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,10 +66,26 @@ def get_db(db_path=None):
     return conn
 
 
-def init_schema(conn):
+def init_schema(conn) -> None:
     """Loo tabelid kui puuduvad."""
     conn.executescript(SCHEMA)
     conn.commit()
+
+
+def ensure_columns(conn) -> None:
+    """Lisa hiljem lisandunud workouts-veerud kui puuduvad (vana DB migratsioon)."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(workouts)")]
+    added = []
+    if "distance_m" not in cols:
+        conn.execute("ALTER TABLE workouts ADD COLUMN distance_m REAL")
+        added.append("distance_m")
+    if "z2_min" not in cols:
+        conn.execute("ALTER TABLE workouts ADD COLUMN z2_min REAL")
+        added.append("z2_min")
+    if added:
+        conn.commit()
+        for c in added:
+            print(f"  ✓ Lisatud veerg: workouts.{c}")
 
 
 if __name__ == "__main__":
