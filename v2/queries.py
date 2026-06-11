@@ -51,10 +51,20 @@ def exercise_sessions(conn, exercise_name: str) -> list[dict]:
         repvals = [x["reps"] for x in s["sets"] if x["reps"]]
         durs = [x["duration"] for x in s["sets"] if x["duration"]]
         s["top_weight"] = max(weights) if weights else None
-        s["top_reps"] = max(repvals) if repvals else None
         s["top_duration"] = max(durs) if durs else None
-        # "töökaal" = enim korratud kaal (mode), muidu max
-        s["work_weight"] = max(set(weights), key=weights.count) if weights else None
+        if weights:
+            # "töökaal" = enim korratud kaal; viigi korral suurim kaal.
+            # Graafiku kaal ja kordused peavad tulema samast päris seeriast
+            # (nt ramp 70×12, 80×8, 90×8 ei tohi muutuda võltsiks 80×12).
+            s["work_weight"] = max(set(weights), key=lambda w: (weights.count(w), w))
+            reps_at_work_weight = [
+                x["reps"] for x in s["sets"]
+                if x["weight"] == s["work_weight"] and x["reps"] is not None
+            ]
+            s["top_reps"] = max(reps_at_work_weight) if reps_at_work_weight else None
+        else:
+            s["work_weight"] = None
+            s["top_reps"] = max(repvals) if repvals else None
         result.append(s)
     result.sort(key=lambda x: x["timestamp"])
     return result
