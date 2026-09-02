@@ -29,7 +29,7 @@ def test_exercise_sessions_work_weight_mode(loaded_conn):
     assert sess[0]["work_weight"] == 70.0
     assert sess[1]["work_weight"] == 72.5
     assert sess[1]["top_weight"] == 72.5
-    assert sess[1]["top_reps"] == 8
+    assert sess[1]["top_reps"] == 6  # kordused samast seeriast kui work_weight (72.5), mitte 70 kg seeriast
 
 
 def test_compute_prs_weighted(loaded_conn):
