@@ -17,11 +17,15 @@ Formaat:
 Reeglid:
     - kaal JUBA kilodes (ei jaga 100-ga)
     - per-seeria pulss/kalorid puuduvad -> NULL (jõutrennis müra)
-    - rep-vahemikud inline (N;6-10 reps) -> exercises tabel
+    - rep-vahemikud inline (N;6-10 reps) -> exercises tabel; ESIMENE rep-mustrile
+      vastav N;-rida võidab, ülejäänud N;-read on kasutaja märkused -> sets.note
+    - kaal võib olla komaga ("12,5 kg") -> 12.5; "0 kg" -> NULL (kaalu pole logitud)
+    - TIME-veerg ("5:00", "1:30") -> sets.duration_sec
     - aasta puudub kuupäevast -> tuleta jooksvast
 """
 import re
 import shutil
+import sqlite3
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -29,7 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import exercise_config as cfg
 from db import get_db, init_schema
-from validation import ValidationError, valid_reps, valid_weight
+from validation import ValidationError, valid_duration_sec, valid_reps, valid_weight
 
 ROOT = Path(__file__).parent.parent
 FAILED = ROOT / "data" / "failed"
@@ -39,8 +43,10 @@ MONTHS = {
     "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
 }
 
-# "70 kg x 6"  /  "17.5 kg x 10"  /  "" (cardio)
-SET_RE = re.compile(r"([\d.]+)\s*kg\s*x\s*(\d+)", re.IGNORECASE)
+# "70 kg x 6"  /  "17.5 kg x 10"  /  "12,5 kg x 15"  /  "" (cardio)
+SET_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*kg\s*x\s*(\d+)", re.IGNORECASE)
+# "6-10 reps" / "20 reps" — peab algama rep-mustriga, muidu on N;-rida märkus
+REP_RANGE_RE = re.compile(r"(\d+)(?:\s*-\s*(\d+))?\s*reps?\b", re.IGNORECASE)
 
 
 def _parse_date(raw: str, now: datetime | None = None) -> datetime | None:
@@ -76,6 +82,17 @@ def _parse_duration(raw: str) -> int | None:
     if m:
         return int(m.group(1)) * 60 + int(m.group(2))
     return None
+
+
+def _parse_time_cell(raw: str | None) -> int | None:
+    """TIME-veerg sekunditeks: '5:00' -> 300, '1:05:00' -> 3900, ''/'0:00' -> None."""
+    parts = [x.strip() for x in (raw or "").strip().split(":")]
+    if not parts or not all(x.isdigit() for x in parts):
+        return None
+    secs = 0
+    for x in parts:
+        secs = secs * 60 + int(x)
+    return secs or None
 
 
 def _workout_type(name):
@@ -129,43 +146,51 @@ def parse_csv(path) -> dict:
             continue
         # uus harjutus
         if line.startswith("#;"):
-            current = {"name": parts[1].strip(), "rep_range": None, "sets": []}
+            current = {"name": parts[1].strip(), "rep_range": None,
+                       "notes": [], "sets": []}
             exercises.append(current)
             continue
-        # rep-vahemik
+        # N;-rida: esimene rep-mustrile vastav = rep-vahemik, kõik muu = märkus
+        # (nt "N;1 kaaluvihk = 2,5kg" või "N;Pulss 90-110")
         if line.startswith("N;") and current is not None:
-            current["rep_range"] = parts[1].strip() if len(parts) > 1 else None
+            txt = parts[1].strip() if len(parts) > 1 else ""
+            if current["rep_range"] is None and _rep_range(txt) != (None, None):
+                current["rep_range"] = txt
+            elif txt:
+                current["notes"].append(txt)
             continue
-        # seeria (algab numbriga)
+        # seeria (algab numbriga): nr;;"70 kg x 6";TIME;REST
         if parts and parts[0].strip().isdigit() and current is not None:
-            # väli 3 (indeks 2) = "70 kg x 6"
             cell = parts[2] if len(parts) > 2 else ""
+            duration = _parse_time_cell(parts[3] if len(parts) > 3 else "")
             sm = SET_RE.search(cell)
             if sm:
-                weight = float(sm.group(1))
+                # "0 kg" = kaalu pole logitud -> NULL, kordused jäävad alles
+                weight = float(sm.group(1).replace(",", ".")) or None
                 reps = int(sm.group(2))
-                current["sets"].append({"reps": reps, "weight": weight})
             else:
-                # cardio: kaal puudub, võib olla aeg väljas 4
-                time_cell = parts[3] if len(parts) > 3 else ""
-                current["sets"].append({"reps": None, "weight": None,
-                                        "time": time_cell.strip()})
+                # cardio/aja-põhine: kaalu ega kordusi pole, ainult TIME
+                weight, reps = None, None
+            current["sets"].append({"reps": reps, "weight": weight,
+                                    "duration": duration})
             continue
 
     return {"meta": meta, "exercises": exercises}
 
 
 def _rep_range(raw):
-    """'6-10 reps' -> (6,10); '20 reps' -> (20,20); muu -> (None,None)."""
+    """'6-10 reps' -> (6,10); '20 reps' -> (20,20); märkus/muu -> (None,None).
+
+    Nõuab sõna "reps" — "1 kaaluvihk = 2,5kg" EI ole rep-vahemik (1,1).
+    """
     if not raw:
         return None, None
-    m = re.match(r"(\d+)\s*-\s*(\d+)", raw)
-    if m:
-        return int(m.group(1)), int(m.group(2))
-    m = re.match(r"(\d+)", raw)
-    if m:
-        return int(m.group(1)), int(m.group(1))
-    return None, None
+    m = REP_RANGE_RE.match(raw.strip())
+    if not m:
+        return None, None
+    lo = int(m.group(1))
+    hi = int(m.group(2) or lo)
+    return lo, hi
 
 
 def save_to_db(parsed: dict, conn) -> tuple[int, str, str]:
@@ -187,6 +212,20 @@ def save_to_db(parsed: dict, conn) -> tuple[int, str, str]:
             if s.get("weight") and s.get("reps"):
                 total_vol += s["weight"] * s["reps"]
 
+    # Kogu kirjutus ühe transaktsioonina: viga keskel (nt pärast DELETE FROM sets)
+    # ei tohi jääda avatuks, muidu commitib järgmine fail pooliku seisu.
+    try:
+        workout_id = _write_workout(parsed, conn, timestamp, date, wtype, total_vol)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return workout_id, date, meta["name"]
+
+
+def _write_workout(parsed: dict, conn, timestamp: str, date: str,
+                   wtype: str, total_vol: float) -> int:
+    meta = parsed["meta"]
     cur = conn.execute(
         """INSERT OR IGNORE INTO workouts
            (timestamp, date, workout_name, workout_type, duration_min,
@@ -209,20 +248,28 @@ def save_to_db(parsed: dict, conn) -> tuple[int, str, str]:
     for ex in parsed["exercises"]:
         name = ex["name"]
         equip = cfg.equipment_for(name)
+        note = "; ".join(ex.get("notes") or []) or None
         for i, s in enumerate(ex["sets"], 1):
             w = s.get("weight")
             reps = s.get("reps")
+            dur = s.get("duration")
             if not valid_reps(reps) or not valid_weight(w):
                 print(f"  HOIATUS: {name} seeria {i} vigane (reps={reps}, kaal={w}), "
                       "jätan vahele", file=sys.stderr)
                 continue
+            if not valid_duration_sec(dur):
+                print(f"  HOIATUS: {name} seeria {i} kestus {dur}s ebausutav, "
+                      "jätan kestuse tühjaks", file=sys.stderr)
+                dur = None
+            if dur is not None and cfg.is_time_based(name):
+                reps = None  # hoid mõõdetakse sekundites, mitte kordustes
             vol = (w * reps) if (w and reps) else 0.0
             conn.execute(
                 """INSERT INTO sets
                    (workout_id, exercise_name, set_number, reps, weight_kg,
-                    equipment, total_volume)
-                   VALUES (?,?,?,?,?,?,?)""",
-                (workout_id, name, i, reps, w, equip, vol),
+                    equipment, total_volume, duration_sec, note)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (workout_id, name, i, reps, w, equip, vol, dur, note),
             )
         # sünkro rep-vahemik exercises tabelisse (CSV = uusim tõde)
         rmin, rmax = _rep_range(ex.get("rep_range"))
@@ -236,8 +283,7 @@ def save_to_db(parsed: dict, conn) -> tuple[int, str, str]:
                        target_reps_max=excluded.target_reps_max""",
                 (name, equip, rmin, rmax, cfg.muscle_for(name)),
             )
-    conn.commit()
-    return workout_id, date, meta["name"]
+    return workout_id
 
 
 def main():
@@ -247,13 +293,19 @@ def main():
     conn = get_db()
     init_schema(conn)
     ok = 0
+    db_error = False
     for path in sys.argv[1:]:
+        src = Path(path)
         try:
             parsed = parse_csv(path)
             wid, date, name = save_to_db(parsed, conn)
+        except sqlite3.Error as e:
+            # DB lukus / ketas täis: sisendfail on korras, ÄRA vii seda failed/-i
+            print(f"✗ {src.name}: andmebaasi viga ({e}) — fail jääb kohale", file=sys.stderr)
+            db_error = True
+            continue
         except Exception as e:
             FAILED.mkdir(parents=True, exist_ok=True)
-            src = Path(path)
             if src.exists():
                 shutil.move(str(src), str(FAILED / src.name))
             print(f"✗ {src.name}: {e} — liigutatud failed/", file=sys.stderr)
@@ -262,6 +314,8 @@ def main():
         nsets = sum(len(e["sets"]) for e in parsed["exercises"])
         print(f"✓ {date} {name}: {len(parsed['exercises'])} harjutust, {nsets} seeriat (id={wid})")
     conn.close()
+    if db_error:
+        sys.exit(2)
     if ok == 0:
         sys.exit(1)
 

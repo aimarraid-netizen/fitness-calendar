@@ -126,3 +126,112 @@ def test_no_exercises_raises(conn):
                        "kcal": None, "avg_hr": None}, "exercises": []}
     with pytest.raises(ValidationError):
         pg.save_to_db(parsed, conn)
+
+
+# ---------------------------------------------------------------------------
+# 2026-09 parandused: N;-märkused, koma, 0 kg, TIME-veerg, rollback
+# ---------------------------------------------------------------------------
+
+HEADER = (
+    "\n;-----------------\n;{name}\n;-----------------\n"
+    ";Date;{date}\n;Duration;1h:00m\n;KCAL;400\n;Heart rate;115 bpm\n\n"
+)
+
+
+def _csv(tmp_path, body, name="Trenn T", date="Jun 15., 15:54"):
+    p = tmp_path / "t.csv"
+    p.write_text(HEADER.format(name=name, date=date) + body, encoding="utf-8")
+    return p
+
+
+def test_rep_range_note_is_not_range():
+    # tootmisviga: "N;1 kaaluvihk = 2,5kg" loeti rep-vahemikuks (1,1)
+    assert pg._rep_range("1 kaaluvihk = 2,5kg") == (None, None)
+    assert pg._rep_range("6-10 reps (kerge)") == (6, 10)
+    assert pg._rep_range("12 REPS") == (12, 12)
+
+
+def test_second_n_line_becomes_note(conn, tmp_path):
+    body = ("#;Triceps Pushdown with Rope;REPS;TIME;REST\n"
+            "N;10-15 reps\nN;1 kaaluvihk = 2,5kg\n"
+            "1;;22.5 kg x 15;;0:00\n2;;22.5 kg x 15;;0:00\n")
+    pg.save_to_db(pg.parse_csv(_csv(tmp_path, body)), conn)
+    row = conn.execute(
+        "SELECT target_reps_min, target_reps_max FROM exercises WHERE name=?",
+        ("Triceps Pushdown with Rope",)).fetchone()
+    assert (row[0], row[1]) == (10, 15)
+    notes = [r[0] for r in conn.execute(
+        "SELECT note FROM sets WHERE exercise_name=? ORDER BY set_number",
+        ("Triceps Pushdown with Rope",))]
+    assert notes == ["1 kaaluvihk = 2,5kg"] * 2
+
+
+def test_note_before_range_still_finds_range(conn, tmp_path):
+    body = ("#;Barbell Curl;REPS;TIME;REST\nN;kerge päev\nN;8-12 reps\n"
+            "1;;35 kg x 8;;0:00\n")
+    pg.save_to_db(pg.parse_csv(_csv(tmp_path, body)), conn)
+    row = conn.execute(
+        "SELECT target_reps_min, target_reps_max FROM exercises WHERE name='Barbell Curl'"
+    ).fetchone()
+    assert (row[0], row[1]) == (8, 12)
+    assert conn.execute("SELECT note FROM sets").fetchone()[0] == "kerge päev"
+
+
+def test_comma_decimal_weight(tmp_path):
+    body = ("#;Shoulder Press;REPS;TIME;REST\nN;8-12 reps\n"
+            "1;;12,5 kg x 15;;0:00\n2;;17.5 kg x 10;;0:00\n")
+    sets = pg.parse_csv(_csv(tmp_path, body))["exercises"][0]["sets"]
+    assert sets[0]["weight"] == 12.5 and sets[0]["reps"] == 15
+    assert sets[1]["weight"] == 17.5
+
+
+def test_zero_weight_becomes_null_keeps_reps(conn, tmp_path):
+    body = "#;Triceps Dips;REPS;TIME;REST\nN;6-10 reps\n1;;0 kg x 12;;0:00\n"
+    pg.save_to_db(pg.parse_csv(_csv(tmp_path, body)), conn)
+    row = conn.execute("SELECT reps, weight_kg FROM sets").fetchone()
+    assert row["reps"] == 12 and row["weight_kg"] is None
+
+
+def test_parse_time_cell():
+    assert pg._parse_time_cell("5:00") == 300
+    assert pg._parse_time_cell("1:05:00") == 3900
+    assert pg._parse_time_cell("1:30") == 90
+    assert pg._parse_time_cell("0:00") is None
+    assert pg._parse_time_cell("") is None
+    assert pg._parse_time_cell(None) is None
+    assert pg._parse_time_cell("abc") is None
+
+
+def test_time_column_saved_as_duration(loaded_conn):
+    row = loaded_conn.execute(
+        "SELECT duration_sec, note, reps, weight_kg FROM sets WHERE exercise_name=?",
+        ("Rowing With Rowing Ergometer",)).fetchone()
+    assert row["duration_sec"] == 300
+    assert row["note"] == "Pulss 90-110"
+    assert row["reps"] is None and row["weight_kg"] is None
+    bor = loaded_conn.execute(
+        "SELECT duration_sec, note FROM sets WHERE exercise_name='Bent Over Barbell Row'"
+    ).fetchone()
+    assert bor["duration_sec"] is None and bor["note"] is None
+
+
+def test_edge_plank_duration_from_time(conn):
+    pg.save_to_db(pg.parse_csv(EDGE), conn)
+    row = conn.execute(
+        "SELECT duration_sec, reps FROM sets WHERE exercise_name='Plank'").fetchone()
+    assert row["duration_sec"] == 90 and row["reps"] is None
+
+
+def test_save_rolls_back_on_error(loaded_conn, monkeypatch):
+    # reimport: INSERT OR IGNORE -> DELETE FROM sets -> viga -> vanad seeriad peavad alles jääma
+    before = loaded_conn.execute("SELECT COUNT(*) FROM sets").fetchone()[0]
+    assert before > 0
+
+    def boom(name):
+        raise RuntimeError("simuleeritud viga pärast DELETE-i")
+
+    monkeypatch.setattr(pg.cfg, "equipment_for", boom)
+    with pytest.raises(RuntimeError):
+        pg.save_to_db(pg.parse_csv(SAMPLE), loaded_conn)
+    assert loaded_conn.execute("SELECT COUNT(*) FROM sets").fetchone()[0] == before
+    assert not loaded_conn.in_transaction

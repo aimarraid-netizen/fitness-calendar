@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 REPS_MIN, REPS_MAX = 1, 200
 WEIGHT_MAX_KG = 400.0
 DURATION_MAX_MIN = 1440
+SET_DURATION_MAX_SEC = 6 * 3600   # üks seeria/hoid/kardiolõik
 HR_MIN, HR_MAX = 25, 250
 KCAL_MAX = 10000
 DISTANCE_MAX_M = 500_000.0
@@ -28,6 +29,10 @@ def valid_weight(weight_kg: float | None) -> bool:
 
 def valid_duration_min(duration_min: int | None) -> bool:
     return duration_min is None or 0 < duration_min <= DURATION_MAX_MIN
+
+
+def valid_duration_sec(duration_sec: int | float | None) -> bool:
+    return duration_sec is None or 0 < duration_sec <= SET_DURATION_MAX_SEC
 
 
 def valid_hr(hr: int | None) -> bool:
