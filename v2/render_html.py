@@ -33,14 +33,14 @@ def group_sets(sets):
 
 def build_payload(conn):
     workouts = q.all_workouts(conn)
-    statuses = a.analyze_all_exercises(conn)
+    sess_cache = a.build_session_cache(conn)      # üks kord, mitte iga trenn × harjutus
+    statuses = a.analyze_all_exercises(conn, sess_cache)
     prs = q.compute_prs(conn)
 
-    # Trennid + grupeeritud seeriad + insight
+    # Trennid + grupeeritud seeriad + analüüs SELLE trenni hetkeseisuga
     wlist = []
     for w in workouts:
         sets = q.workout_sets(conn, w["id"])
-        # grupeeri harjutuse kaupa, säilitades järjekorra
         ex_order = []
         ex_sets = {}
         for s in sets:
@@ -48,19 +48,27 @@ def build_payload(conn):
                 ex_sets[s["exercise_name"]] = []
                 ex_order.append(s["exercise_name"])
             ex_sets[s["exercise_name"]].append(s)
+        analysis = a.workout_analysis(conn, w["id"], sess_cache)
         exercises = []
         for name in ex_order:
             grouped = group_sets(ex_sets[name])
+            pe = analysis["per_exercise"].get(name, {})
             exercises.append({
                 "name": name,
                 "muscle": cfg.muscle_for(name),
                 "is_cardio": cfg.is_cardio(name),
                 "is_time": cfg.is_time_based(name),
+                "status": pe.get("status"),
+                "delta_kg": pe.get("delta_kg"),
+                "delta_reps": pe.get("delta_reps"),
+                "pr": pe.get("pr", False),
+                "first": pe.get("first", False),
                 "groups": [{"count": g["count"], "reps": g["reps"],
                             "weight": g["weight"], "duration": g["duration"],
                             "equipment": g["equipment"]}
                            for g in grouped],
             })
+        dist_km = w["distance_m"] / 1000 if w.get("distance_m") else None
         wlist.append({
             "id": w["id"],
             "date": w["date"],
@@ -69,16 +77,18 @@ def build_payload(conn):
             "type": w["workout_type"],
             "duration": w["duration_min"],
             "volume": round(w["total_volume"] or 0),
-            "distance_km": round(w["distance_m"] / 1000, 1) if w.get("distance_m") else None,
-            "avg_speed_kmh": round((w["distance_m"] / 1000) / (w["duration_min"] / 60), 1) if w.get("distance_m") and w.get("duration_min") and w["duration_min"] > 0 else None,
+            "distance_km": round(dist_km, 1) if dist_km else None,
+            "avg_speed_kmh": (round(dist_km / (w["duration_min"] / 60), 1)
+                              if dist_km and w.get("duration_min") else None),
             "avg_hr": w["avg_hr"],
             "kcal": w["kcal"],
             "exercises": exercises,
-            "insight": a.workout_insight(conn, w["id"]),
+            "pr_count": len(analysis["pr_hits"]),
+            "prs": analysis["pr_hits"],
+            "insight": a.format_insight(analysis),
         })
 
     # Harjutused + ajalugu graafiku jaoks
-    # Target rep ranges DB-st
     ex_targets = {}
     for row in conn.execute("SELECT name, target_sets, target_reps_min, target_reps_max FROM exercises"):
         ex_targets[row["name"]] = {
@@ -88,29 +98,24 @@ def build_payload(conn):
         }
 
     exlist = {}
-    for name in q.all_exercise_names(conn):
-        sess = q.exercise_sessions(conn, name)
+    for name, sess in sess_cache.items():
         info = statuses.get(name, {})
         tgt = ex_targets.get(name, {})
-        # Arvuta fail iga sessiooni jaoks:
-        # fail = sama kaal mis eelmine + kordused väiksemad (ei teinud progressi)
+        # fail = sama varustus + sama kaal mis eelmine kord, aga kordused kukkusid
         history_with_fail = []
         for i, s in enumerate(sess):
             fail = False
             if i > 0:
                 prev_s = sess[i - 1]
                 same_equip = s["equipment"] == prev_s["equipment"]
-                days_gap = 0
                 try:
-                    from datetime import datetime as _dt
-                    days_gap = (_dt.strptime(s["date"], "%Y-%m-%d") -
-                                _dt.strptime(prev_s["date"], "%Y-%m-%d")).days
-                except Exception:
-                    pass
-                if same_equip and days_gap <= 28:
+                    days_gap = (datetime.strptime(s["date"], "%Y-%m-%d") -
+                                datetime.strptime(prev_s["date"], "%Y-%m-%d")).days
+                except ValueError:
+                    days_gap = 0
+                if same_equip and days_gap <= a.PAUSE_DAYS:
                     pw, cw = prev_s["work_weight"], s["work_weight"]
                     pr, cr = prev_s["top_reps"], s["top_reps"]
-                    # Sama kaal, kordused kukkusid = fail
                     if pw is not None and cw is not None and cw == pw:
                         if pr is not None and cr is not None and cr < pr:
                             fail = True
@@ -118,9 +123,8 @@ def build_payload(conn):
                 "date": s["date"],
                 "weight": s["work_weight"],
                 "reps": s["top_reps"],
-                "sets": len(s.get("sets", [])) or 3,
+                "sets": s["work_sets"],           # seeriad TÖÖKAALUL (ramp: 90 kg × 1, mitte 3)
                 "duration": s.get("top_duration"),
-                "volume": round(s["total_volume"]),
                 "equipment": s["equipment"],
                 "fail": fail,
             })
@@ -137,12 +141,11 @@ def build_payload(conn):
             "history": history_with_fail,
         }
 
-    # Ülevaade / mustrid
+    # Ülevaade / mustrid (kalendrinädalad, ankur = viimane treenitud nädal)
     balance = a.muscle_balance(conn)
+    window = a.balance_window(conn)
     trend, totals = a.volume_trend(conn)
-    weekly = q.weekly_volume(conn)
 
-    # globaalsed mustrid (Kratt märkab)
     krat_notes = []
     stuck = [(n, i["weeks_stuck"]) for n, i in statuses.items()
              if i["status"] == "seisab" and i.get("weeks_stuck") and i["weeks_stuck"] >= 2]
@@ -154,7 +157,7 @@ def build_payload(conn):
         mgs = list(balance.items())
         top, low = mgs[0], mgs[-1]
         krat_notes.append(f"⚖️ Mahu fookus: {top[0]} on kõige treenitud, {low[0]} kõige vähem.")
-    krat_notes.append(f"📊 Kogumahu trend (6 näd): {trend}.")
+    krat_notes.append(f"📊 Kogumahu trend ({len(totals)} näd): {trend}.")
     growing = [n for n, i in statuses.items() if i["status"] == "areneb"]
     krat_notes.append(f"🟢 Arengus {len(growing)} harjutust {len(statuses)}-st.")
 
@@ -163,8 +166,9 @@ def build_payload(conn):
         "workouts": wlist,
         "exercises": exlist,
         "balance": balance,
+        "balance_window": window,
         "trend": trend,
-        "weekly_volume": weekly,
+        "weekly_volume": q.weekly_volume(conn),
         "krat_notes": krat_notes,
         "stats": {
             "total_workouts": len(wlist),

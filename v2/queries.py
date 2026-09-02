@@ -1,5 +1,6 @@
 """Päringud andmebaasi vastu — taaskasutatav kiht analüüsile, HTML-ile, Krattile."""
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -24,8 +25,11 @@ def workout_sets(conn, workout_id: int) -> list[dict]:
 def exercise_sessions(conn, exercise_name: str) -> list[dict]:
     """Harjutuse ajalugu sessioonide kaupa (vanimast uuemani).
 
-    Tagastab listi: [{date, timestamp, equipment, sets:[{reps,weight}],
-                      top_weight, top_reps, total_volume}]
+    Tagastab listi: [{date, timestamp, equipment, sets:[{reps,weight,duration}],
+                      top_weight, top_duration, work_weight, top_reps, work_sets,
+                      total_volume}]
+    work_weight = enim korratud kaal; top_reps ja work_sets käivad SELLE kaalu
+    seeriate kohta (ramp 70×12, 80×8, 90×8 → 90 kg, 8 kordust, 1 seeria).
     """
     rows = conn.execute(
         """SELECT w.date, w.timestamp, s.set_number, s.reps, s.weight_kg,
@@ -62,9 +66,11 @@ def exercise_sessions(conn, exercise_name: str) -> list[dict]:
                 if x["weight"] == s["work_weight"] and x["reps"] is not None
             ]
             s["top_reps"] = max(reps_at_work_weight) if reps_at_work_weight else None
+            s["work_sets"] = sum(1 for x in s["sets"] if x["weight"] == s["work_weight"])
         else:
             s["work_weight"] = None
             s["top_reps"] = max(repvals) if repvals else None
+            s["work_sets"] = len(s["sets"])
         result.append(s)
     result.sort(key=lambda x: x["timestamp"])
     return result
@@ -84,8 +90,9 @@ def exercise_meta(conn, name: str) -> dict | None:
 def compute_prs(conn) -> dict[str, dict]:
     """Arvuta rekordid baasist (üks tõeallikas).
 
-    PR = suurim kaal harjutuse kohta; sama kaalu puhul enim kordusi.
-    Cardio ja NULL-kaal harjutused: PR korduste/aja järgi.
+    PR = suurim kaal harjutuse kohta; sama kaalu puhul enim kordusi; viigi
+    korral ESIMENE saavutamise kuupäev (deterministlik).
+    Cardio ja NULL-kaal harjutused: PR korduste järgi.
     """
     prs = {}
     for name in all_exercise_names(conn):
@@ -95,7 +102,7 @@ def compute_prs(conn) -> dict[str, dict]:
             """SELECT w.date, s.reps, s.weight_kg
                FROM sets s JOIN workouts w ON s.workout_id=w.id
                WHERE s.exercise_name=? AND s.weight_kg IS NOT NULL
-               ORDER BY s.weight_kg DESC, s.reps DESC LIMIT 1""",
+               ORDER BY s.weight_kg DESC, s.reps DESC, w.date ASC LIMIT 1""",
             (name,),
         ).fetchone()
         if rows:
@@ -106,7 +113,7 @@ def compute_prs(conn) -> dict[str, dict]:
             r2 = conn.execute(
                 """SELECT w.date, s.reps FROM sets s JOIN workouts w ON s.workout_id=w.id
                    WHERE s.exercise_name=? AND s.reps IS NOT NULL
-                   ORDER BY s.reps DESC LIMIT 1""",
+                   ORDER BY s.reps DESC, w.date ASC LIMIT 1""",
                 (name,),
             ).fetchone()
             if r2:
@@ -114,20 +121,43 @@ def compute_prs(conn) -> dict[str, dict]:
     return prs
 
 
-def weekly_volume(conn) -> dict[str, dict[str, float]]:
-    """Maht nädalate kaupa (ISO nädal) lihasgrupi lõikes."""
+def iso_week(date_str: str) -> str:
+    """'2026-05-21' -> '2026-W21'."""
+    return datetime.strptime(date_str, "%Y-%m-%d").strftime("%G-W%V")
+
+
+def iso_weeks_between(first: str, last: str) -> list[str]:
+    """Kõik ISO-nädalad 'YYYY-Www' vahemikus (kaasa arvatud), järjest."""
+    y1, w1 = (int(x) for x in first.split("-W"))
+    y2, w2 = (int(x) for x in last.split("-W"))
+    d = datetime.fromisocalendar(y1, w1, 1)
+    end = datetime.fromisocalendar(y2, w2, 1)
+    out = []
+    while d <= end:
+        out.append(d.strftime("%G-W%V"))
+        d += timedelta(days=7)
+    return out
+
+
+def weekly_volume(conn, fill_gaps: bool = True) -> dict[str, dict[str, float]]:
+    """Maht nädalate kaupa (ISO nädal) lihasgrupi lõikes.
+
+    fill_gaps=True: ka treeninguta nädalad on võtmena ({}), et "viimased N nädalat"
+    tähendaks kalendrinädalaid, mitte "N viimast treenitud nädalat".
+    """
     rows = conn.execute(
         """SELECT w.date, s.exercise_name, s.total_volume, s.reps
            FROM sets s JOIN workouts w ON s.workout_id=w.id"""
     ).fetchall()
-    from datetime import datetime
     weeks = {}
     for r in rows:
-        d = datetime.strptime(r["date"], "%Y-%m-%d")
-        wk = d.strftime("%G-W%V")
+        wk = iso_week(r["date"])
         mg = cfg.muscle_for(r["exercise_name"])
         weeks.setdefault(wk, {}).setdefault(mg, 0.0)
         weeks[wk][mg] += r["total_volume"] or 0.0
+    if fill_gaps and weeks:
+        for wk in iso_weeks_between(min(weeks), max(weeks)):
+            weeks.setdefault(wk, {})
     return dict(sorted(weeks.items()))
 
 

@@ -231,14 +231,17 @@ function renderCal(app){
   DATA.krat_notes.forEach(n=>html+=`<div class="note">${escHtml(n)}</div>`);
   html+=`</div>`;
   // muscle balance bars
-  html+=`<div class="card"><div class="title">⚖️ Lihasgrupi maht (4 näd)</div>`;
-  const mb=DATA.balance,mx=Math.max(...Object.values(mb));
-  for(const[mg,v]of Object.entries(mb)){
-    const pct=(v/mx*100).toFixed(0);
-    html+=`<div style="margin-top:9px"><div class="row"><span class="muted">${mg}</span><span class="muted">${Math.round(v)} kg</span></div>
-    <div style="height:7px;background:var(--card2);border-radius:5px;margin-top:4px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--accent);border-radius:5px"></div></div></div>`;
+  const mb=DATA.balance||{},mbVals=Object.values(mb);
+  if(mbVals.length){
+    const mx=Math.max(...mbVals);
+    html+=`<div class="card"><div class="title">⚖️ Lihasgrupi maht (${fmtWindow(DATA.balance_window)})</div>`;
+    for(const[mg,v]of Object.entries(mb)){
+      const pct=mx>0?(v/mx*100).toFixed(0):0;
+      html+=`<div style="margin-top:9px"><div class="row"><span class="muted">${mg}</span><span class="muted">${Math.round(v)} kg</span></div>
+      <div style="height:7px;background:var(--card2);border-radius:5px;margin-top:4px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--accent);border-radius:5px"></div></div></div>`;
+    }
+    html+=`</div>`;
   }
-  html+=`</div>`;
   // calendar
   if(view.calY==null){const last=DATA.workouts[0];const d=new Date(last.date);view.calY=d.getFullYear();view.calM=d.getMonth();}
   html+=`<div class="card"><div class="calhdr"><button onclick="moveMonth(-1)" aria-label="Eelmine kuu">‹</button>
@@ -294,10 +297,17 @@ function renderCal(app){
   app.innerHTML=html;
 }
 function prCount(w){
-  const m=(w.insight||"").match(/(\d+) uut rekord/);
-  if(m)return`<span class="chip accent">🏆 ${m[1]} PR</span>`;
-  if((w.insight||"").includes("rekord"))return`<span class="chip accent">🏆 PR</span>`;
+  // PR-id tulevad payloadist (analyze.workout_analysis), mitte teksti parsimisest
+  const n=w.pr_count||0;
+  if(n>1)return`<span class="chip accent">🏆 ${n} PR</span>`;
+  if(n===1)return`<span class="chip accent">🏆 PR</span>`;
   return"";
+}
+function fmtWindow(win){
+  // ["2026-W21","2026-W24"] -> "W21–W24"
+  if(!win||win.length!==2)return"4 näd";
+  const w=s=>"W"+(String(s).split("-W")[1]||s);
+  return win[0]===win[1]?w(win[0]):`${w(win[0])}–${w(win[1])}`;
 }
 function moveMonth(dir){const y=window.scrollY;view.calM+=dir;if(view.calM<0){view.calM=11;view.calY--}if(view.calM>11){view.calM=0;view.calY++}render(true);window.scrollTo(0,y);}
 function fmtDate(ds){const d=new Date(ds);return`${d.getDate()}. ${MONTHS[d.getMonth()].toLowerCase()}`;}
@@ -337,7 +347,7 @@ function renderWorkout(app){
     // exercises
     html+=`<div class="title mt-block">Harjutused</div>`;
     w.exercises.forEach(ex=>{
-      const delta=exDelta(ex.name);
+      const delta=exDelta(ex);
       const g0=(ex.groups&&ex.groups.length)?ex.groups[0]:null;
       const summary=g0?fmtSet(g0):"—";
       html+=`<div class="card tap exgroup" onclick="openExercise('${esc(ex.name)}')">
@@ -350,28 +360,26 @@ function renderWorkout(app){
   }
   app.innerHTML=html;
 }
-// delta vs previous session, equipment-aware
-function exDelta(name){
-  const ex=DATA.exercises[name];if(!ex||ex.history.length<2)return"";
-  const h=ex.history,last=h[h.length-1],prev=h[h.length-2];
-  if(last.equipment!==prev.equipment)return` <span class="delta d-neutral">↔ vahetus</span>`;
-  // Pikk paus (>4 nädalat) -> uus tsükkel, ei võrdle
-  const daysDiff=(new Date(last.date)-new Date(prev.date))/(1000*60*60*24);
-  if(daysDiff>28)return` <span class="delta d-neutral">↺ uus tsükkel</span>`;
-  if(last.weight!=null&&prev.weight!=null){
-    // Kaalutõus: näita ainult kaal (roheline). Korduste langus = planeeritud, EI punane.
-    if(last.weight>prev.weight)return` <span class="delta d-up">▲ +${(last.weight-prev.weight).toFixed(1)}kg</span>`;
-    if(last.weight<prev.weight)return` <span class="delta d-dn">▼ ${(last.weight-prev.weight).toFixed(1)}kg</span>`;
-    // Sama kaal: vaata kordusi
-    if(last.reps!=null&&prev.reps!=null){
-      if(last.reps>prev.reps)return` <span class="delta d-up">▲ +${last.reps-prev.reps} kord</span>`;
-      if(last.reps<prev.reps)return` <span class="delta d-dn">▼ ${last.reps-prev.reps} kord</span>`;
-    }
-  }else if(last.reps!=null&&prev.reps!=null){
-    if(last.reps>prev.reps)return` <span class="delta d-up">▲ +${last.reps-prev.reps} kord</span>`;
-    if(last.reps<prev.reps)return` <span class="delta d-dn">▼ ${last.reps-prev.reps} kord</span>`;
+// Delta SELLE trenni kohta — arvutatud Pythonis (analyze.workout_analysis) trenni
+// hetkeseisuga; JS ainult kuvab. Varem võrreldi siin alati harjutuse KAHT VIIMAST
+// sessiooni, s.t. vana trenni vaates näidati uusima trenni deltat.
+function exDelta(ex){
+  if(ex.is_cardio)return"";
+  const st=ex.status;
+  const pr=ex.pr?` <span class="delta d-up" title="Uus rekord">🏆</span>`:"";
+  if(!st||(st==="uus"&&ex.first))return pr;
+  if(st==="uus")return` <span class="delta d-neutral">↺ uus tsükkel</span>`+pr;
+  if(st==="vahetus")return` <span class="delta d-neutral">↔ vahetus</span>`+pr;
+  // Kaalumuutus võidab: topeltprogressioonis (kaal↑, kordused↓) näita ainult kaalu
+  if(ex.delta_kg){
+    const up=ex.delta_kg>0;
+    return` <span class="delta ${up?"d-up":"d-dn"}">${up?"▲ +":"▼ "}${ex.delta_kg.toFixed(1)}kg</span>`+pr;
   }
-  return` <span class="delta d-neutral">=</span>`;
+  if(ex.delta_reps){
+    const up=ex.delta_reps>0;
+    return` <span class="delta ${up?"d-up":"d-dn"}">${up?"▲ +":"▼ "}${ex.delta_reps} kord</span>`+pr;
+  }
+  return` <span class="delta d-neutral">=</span>`+pr;
 }
 
 // ===== EXERCISE =====
@@ -389,7 +397,7 @@ function renderExercise(app){
     infoHtml+=`<div class="exinfo-card"><div class="exinfo-lbl">Praegune raskus</div><div class="exinfo-val">${last.weight} kg</div></div>`;
   }
   if(last&&last.sets&&last.reps){
-    infoHtml+=`<div class="exinfo-card"><div class="exinfo-lbl">Praegune skeem</div><div class="exinfo-val">${last.sets}×${last.reps}</div></div>`;
+    infoHtml+=`<div class="exinfo-card"><div class="exinfo-lbl">Praegune skeem</div><div class="exinfo-val">${last.sets??"?"}×${last.reps}</div></div>`;
   }
   if(tgt.sets&&tgt.reps_min&&tgt.reps_max){
     infoHtml+=`<div class="exinfo-card"><div class="exinfo-lbl">Eesmärk</div><div class="exinfo-val">${tgt.sets}×${tgt.reps_min}–${tgt.reps_max}</div></div>`;
@@ -421,7 +429,7 @@ function renderExercise(app){
   [...ex.history].reverse().forEach(h=>{
     let val;
     if(h.duration!=null&&h.duration>0)val=fmtDur(h.duration);
-    else if(h.weight!=null)val=`${h.sets||3}×${h.reps} · ${h.weight}kg`;
+    else if(h.weight!=null)val=`${h.sets??"?"}×${h.reps} · ${h.weight}kg`;
     else val=h.reps!=null?`${h.reps} kordust`:"–";
     const failMark=h.fail?` <span style="color:#f85149;font-size:11px">❌</span>`:"";
     html+=`<div class="histline"><span class="hd">${fmtDate(h.date)}</span><span>${val}${failMark}</span></div>`;
@@ -480,8 +488,8 @@ function drawChart(){
         if(pt.weight==null)return;
         const cx=x.getPixelForValue(i);
         const cy=y.getPixelForValue(pt.weight);
-        const sets=pt.sets||3;
-        const reps=pt.reps||"?";
+        const sets=pt.sets??"?";
+        const reps=pt.reps??"?";
         const lbl=`${sets}×${reps}`;
         const isFail=pt.fail;
         c.save();
@@ -532,7 +540,7 @@ function drawChart(){
             label:items=>{
               const i=items.dataIndex;
               const pt=h[i];
-              const s=pt.sets||3,r=pt.reps||"?";
+              const s=pt.sets??"?",r=pt.reps??"?";
               const w=pt.weight!=null?`${pt.weight} kg`:"kaal puudub";
               return [`${w}  ·  ${s}×${r}`,pt.fail?"❌ kordused kukkusid":"✅ õnnestus"];
             }

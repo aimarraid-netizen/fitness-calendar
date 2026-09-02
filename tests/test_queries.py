@@ -50,3 +50,42 @@ def test_weekly_volume_iso_weeks(loaded_conn):
     wv = q.weekly_volume(loaded_conn)
     assert "2026-W21" in wv          # 21. mai 2026 = ISO nädal 21
     assert wv["2026-W21"]["selg"] > 0
+
+
+def test_work_sets_counts_only_work_weight_sets(conn):
+    # ramp 70×12, 80×8, 90×8: töökaal 90 (viik → suurim), 8 kordust, 1 seeria — mitte "3×8 · 90kg"
+    pg.save_to_db(_workout("Trenn A", datetime(2026, 6, 11, 16, 0), [
+        _ex("Romanian Deadlift", [(70.0, 12), (80.0, 8), (90.0, 8)]),
+        _ex("Barbell Curl", [(35.0, 8), (35.0, 8), (35.0, 7)]),
+        _ex("Triceps Dips", [(None, 10), (None, 12)]),
+    ]), conn)
+    by = {s["date"]: s for s in q.exercise_sessions(conn, "Romanian Deadlift")}
+    s = by["2026-06-11"]
+    assert (s["work_weight"], s["top_reps"], s["work_sets"]) == (90.0, 8, 1)
+    curl = q.exercise_sessions(conn, "Barbell Curl")[-1]
+    assert (curl["work_weight"], curl["top_reps"], curl["work_sets"]) == (35.0, 8, 3)
+    dips = q.exercise_sessions(conn, "Triceps Dips")[-1]
+    assert (dips["work_weight"], dips["top_reps"], dips["work_sets"]) == (None, 12, 2)
+
+
+def test_compute_prs_tie_returns_first_date(loaded_conn):
+    # sama tipp (70×6) kordub hiljem → PR kuupäev jääb ESIMESEKS saavutamiseks
+    pg.save_to_db(_workout("3. Selg & biitseps", datetime(2026, 5, 28, 16, 0), [
+        _ex("Bent Over Barbell Row", [(70.0, 6), (70.0, 6), (70.0, 6)]),
+    ]), loaded_conn)
+    assert q.compute_prs(loaded_conn)["Bent Over Barbell Row"]["date"] == "2026-05-21"
+
+
+def test_weekly_volume_fills_calendar_gaps(conn):
+    pg.save_to_db(_workout("A", datetime(2026, 5, 12, 10, 0),
+                           [_ex("Barbell Curl", [(30.0, 10)])]), conn)      # W20
+    pg.save_to_db(_workout("B", datetime(2026, 6, 16, 10, 0),
+                           [_ex("Barbell Curl", [(30.0, 10)])]), conn)      # W25
+    wv = q.weekly_volume(conn)
+    assert list(wv) == ["2026-W20", "2026-W21", "2026-W22", "2026-W23", "2026-W24", "2026-W25"]
+    assert wv["2026-W22"] == {}
+    assert list(q.weekly_volume(conn, fill_gaps=False)) == ["2026-W20", "2026-W25"]
+
+
+def test_iso_weeks_between_year_boundary():
+    assert q.iso_weeks_between("2025-W52", "2026-W02") == ["2025-W52", "2026-W01", "2026-W02"]
