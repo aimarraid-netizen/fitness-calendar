@@ -235,3 +235,20 @@ def test_save_rolls_back_on_error(loaded_conn, monkeypatch):
         pg.save_to_db(pg.parse_csv(SAMPLE), loaded_conn)
     assert loaded_conn.execute("SELECT COUNT(*) FROM sets").fetchone()[0] == before
     assert not loaded_conn.in_transaction
+
+
+def test_workout_type_is_gym_for_ab():
+    # "Trenn A" -> "jalad" oli vale (täiskeha) ja andis sama nimele kaks tüüpi
+    assert pg._workout_type("Trenn A") == "jõusaal"
+    assert pg._workout_type("Trenn B") == "jõusaal"
+    assert pg._workout_type("3. Selg & biitseps") == "jõusaal"
+    assert pg._workout_type("Kodutrenn") == "kodune"
+    assert pg._workout_type(None) == "jõusaal"
+
+
+def test_unknown_exercise_warns_on_import(conn, tmp_path, capsys):
+    body = "#;Mystery Curl;REPS;TIME;REST\nN;8-12 reps\n1;;20 kg x 10;;0:00\n"
+    pg.save_to_db(pg.parse_csv(_csv(tmp_path, body)), conn)
+    assert "tundmatu harjutus 'Mystery Curl'" in capsys.readouterr().err
+    assert conn.execute(
+        "SELECT muscle_group FROM exercises WHERE name='Mystery Curl'").fetchone()[0] == "muu"

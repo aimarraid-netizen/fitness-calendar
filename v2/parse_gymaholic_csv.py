@@ -96,12 +96,13 @@ def _parse_time_cell(raw: str | None) -> int | None:
 
 
 def _workout_type(name):
+    """Trenni tüüp kalendri värvi/ikooni jaoks. A/B eristus tuleb workout_name-ist.
+
+    Varem "Trenn A" -> "jalad", "Trenn B" -> "selg": vale (Trenn A on täiskeha:
+    squat+bench+pulldown+press) ja sama nimi sai baasis kaks tüüpi.
+    """
     n = (name or "").lower()
-    if "trenn a" in n or "workout a" in n:
-        return "jalad"
-    if "trenn b" in n or "workout b" in n:
-        return "selg"
-    if "trenn c" in n or "workout c" in n or "kodu" in n:
+    if "kodu" in n:
         return "kodune"
     return "jõusaal"
 
@@ -220,6 +221,10 @@ def save_to_db(parsed: dict, conn) -> tuple[int, str, str]:
     except Exception:
         conn.rollback()
         raise
+    for ex in parsed["exercises"]:
+        if ex["name"] not in cfg.MUSCLE_GROUP:
+            print(f"  HOIATUS: tundmatu harjutus '{ex['name']}' — lisa exercise_config.py-sse "
+                  "(praegu lihasgrupp='muu', varustus puudub)", file=sys.stderr)
     return workout_id, date, meta["name"]
 
 
