@@ -1,7 +1,6 @@
 from datetime import datetime
 
 import parse_gymaholic_csv as pg
-
 import queries as q
 
 

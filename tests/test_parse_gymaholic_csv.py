@@ -1,9 +1,9 @@
 from datetime import datetime
 
-import parse_gymaholic_csv as pg
 import pytest
 from conftest import FIXTURES
 
+import parse_gymaholic_csv as pg
 from validation import ValidationError
 
 SAMPLE = FIXTURES / "sample_single_workout.csv"
