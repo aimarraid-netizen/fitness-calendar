@@ -11,3 +11,16 @@ data/*.bak-*
 data/*.bak2
 data/*.pre-migration.bak
 logs/
+
+# andmed ja isikuinfo — EI GITI (Pages serveerib ainult site/)
+data/
+backups/
+claude_project/
+/index.html
+/calendar.html
+/*.csv
+/*.zip
+/*.fit
+/*.gpx
+*.db
+*.db.bak*

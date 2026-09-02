@@ -13,7 +13,7 @@ import exercise_config as cfg
 import queries as q
 from db import get_db
 
-OUT = Path(__file__).parent.parent / "index.html"
+OUT = Path(__file__).parent.parent / "site" / "index.html"
 TEMPLATE = Path(__file__).parent / "template.html"
 
 
@@ -174,18 +174,28 @@ def build_payload(conn):
     }
 
 
-def main():
-    conn = get_db()
+def render(conn, out: Path = OUT) -> Path:
+    """Genereeri HTML antud ühendusest ja kirjuta `out`-i. Tagastab kirjutatud tee.
+
+    Eraldi funktsioon, et testid saaksid renderdada tmp-kausta ilma
+    projekti site/ kausta puutumata.
+    """
     payload = build_payload(conn)
     template = TEMPLATE.read_text(encoding="utf-8")
     html = template.replace("/*__DATA__*/", json.dumps(payload, ensure_ascii=False))
     html = html.replace("{{ generated }}", payload["generated"])
-    OUT.write_text(html, encoding="utf-8")
-    # calendar.html = alias
-    (OUT.parent / "calendar.html").write_text(html, encoding="utf-8")
-    print(f"✓ HTML genereeritud: {OUT} ({len(html)} baiti)")
-    print(f"  {payload['stats']['total_workouts']} trenni, "
-          f"{payload['stats']['total_exercises']} harjutust")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding="utf-8")
+    return out
+
+
+def main():
+    conn = get_db()
+    out = render(conn)
+    n_workouts = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+    n_exercises = conn.execute("SELECT COUNT(DISTINCT exercise_name) FROM sets").fetchone()[0]
+    print(f"✓ HTML genereeritud: {out} ({out.stat().st_size} baiti)")
+    print(f"  {n_workouts} trenni, {n_exercises} harjutust")
     conn.close()
 
 

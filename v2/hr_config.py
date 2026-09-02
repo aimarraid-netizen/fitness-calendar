@@ -1,6 +1,6 @@
 """Trenn 2.0 — jagatud pulsikonfig + Karvoneni tsoonid.
 
-RESTING_HR ja MAX_HR loetakse .env failist (vaikimisi 62/179).
+RESTING_HR ja MAX_HR loetakse .env failist (vaikimisi 60/180).
 Kasutavad parse_fit.py ja parse_gpx.py — üks tõeallikas tsooniloogikale.
 """
 import os
@@ -11,8 +11,8 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).parent.parent
 load_dotenv(ROOT / ".env")
 
-RESTING_HR = int(os.getenv("RESTING_HR", 62))
-MAX_HR = int(os.getenv("MAX_HR", 179))
+RESTING_HR = int(os.getenv("RESTING_HR", 60))
+MAX_HR = int(os.getenv("MAX_HR", 180))
 
 ZONE_NAMES = ("z1", "z2", "z3", "z4", "z5")
 

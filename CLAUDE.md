@@ -1,5 +1,5 @@
 # Boundaries
-You are only allowed to work inside ~/projects/trenn/ (symlink: ~/trenn/).
+You are only allowed to work inside ~/projects/trenn/.
 Do not read, touch or access anything outside of this directory.
 
 # Trenn 2.0 — Arhitektuur (ümber tehtud 2026-05-22)
@@ -11,8 +11,8 @@ Do not read, touch or access anything outside of this directory.
 Trenni järel: jaga Gymaholicu ÜKSIK-TRENNI CSV otse Discordis Kratile
   → v2/parse_gymaholic_csv.py  (parse + valideeri)
   → data/trenn.db              (SQLite, üks tõeallikas)
-  → v2/render_html.py          (mobile-first HTML)
-  → git push                   (GitHub Pages)
+  → v2/render_html.py          (mobile-first HTML → site/index.html)
+  → git push                   (GitHub Pages deploy'b AINULT site/ kausta)
 
 Kardio: FIT-fail → v2/parse_fit.py
 Kardio: GPX/XML → v2/parse_gpx.py
@@ -44,7 +44,8 @@ Lives trenni ajal (Kratt Discordis):
 📅 Kalender + Kratti koondanalüüs → 🏋️ trenn (grupeeritud read) → 📈 harjutus (Chart.js graafik)
 - Grupeeritud seeriad: `3×6 · 70kg` (mitte 3 eraldi rida)
 - Nutikad delta-värvid: varustusvahetus = neutraalne (mitte punane)
-- `index.html` = `calendar.html` (alias), push GitHub Pages'i
+- Väljund `site/index.html`; `deploy.yml` publitseerib AINULT `site/` (varem kogu repo → trenn.db oli avalik)
+- **`data/`, `backups/`, `claude_project/` EI ole gitis** (.gitignore) — isiklikud terviseandmed; DB varukoopia `data/trenn.db.bak-*`
 
 ## Live URL
 https://aimarraid-netizen.github.io/trenn-d8b4c9a1/
