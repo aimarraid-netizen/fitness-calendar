@@ -6,7 +6,7 @@ target-version = "py311"
 select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["db", "queries", "analyze", "exercise_config", "hr_config", "validation"]
+known-first-party = ["analyze", "cardio_common", "db", "exercise_config", "hr_config", "kratt_tools", "parse_fit", "parse_gpx", "parse_gymaholic_csv", "queries", "render_html", "validation"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -32,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import exercise_config as cfg
-from db import get_db, init_schema
+from db import get_db, init_schema, local_naive_iso
 from validation import ValidationError, valid_duration_sec, valid_reps, valid_weight
 
 ROOT = Path(__file__).parent.parent
@@ -202,8 +202,8 @@ def save_to_db(parsed: dict, conn) -> tuple[int, str, str]:
     if not parsed["exercises"]:
         raise ValidationError("ühtegi harjutust ei leitud")
     dt = meta["date"]
-    timestamp = dt.strftime("%Y-%m-%d %H:%M:%S")
-    date = dt.strftime("%Y-%m-%d")
+    timestamp = local_naive_iso(dt)   # CSV kuupäev on juba lokaalaeg
+    date = timestamp[:10]
     wtype = _workout_type(meta["name"] or "")
 
     # arvuta total_volume

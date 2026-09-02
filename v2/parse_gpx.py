@@ -15,7 +15,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import validation as val
-from db import ensure_columns, get_db, init_schema
+from cardio_common import CARDIO_INSERT_SQL, cardio_insert_values, find_existing_cardio, sport_et
+from db import get_db, init_schema, to_local_iso
 from hr_config import zone_minutes
 
 ROOT = Path(__file__).parent.parent
@@ -26,16 +27,6 @@ FAILED = ROOT / "data" / "failed"
 GPX_NS = "http://www.topografix.com/GPX/1/1"
 EXT_NS = "http://www.garmin.com/xmlschemas/TrackPointExtension/v1"
 
-SPORT_MAP = {
-    "walking": "kõndimine",
-    "cycling": "rattasõit",
-    "swimming": "ujumine",
-    "hiking": "matk",
-    "running": "jooksmine",
-    "biking": "rattasõit",
-    "generic": "kardio",
-    "other": "kardio",
-}
 
 def _haversine(lat1, lon1, lat2, lon2):
     R = 6371000
@@ -47,7 +38,7 @@ def _haversine(lat1, lon1, lat2, lon2):
 
 
 def _parse_time(s):
-    """ISO8601 → datetime (UTC)."""
+    """ISO8601 → naive datetime UTC-s ('Z' eemaldatakse; to_local_iso teisendab salvestusel)."""
     if not s:
         return None
     s = s.rstrip("Z")
@@ -183,31 +174,15 @@ def parse_gpx(gpx_path: Path) -> dict | None:
 
 def insert_workout(conn, gpx_path: Path, data: dict) -> tuple[bool, int | None]:
     """Lisa kardio-treening workouts tabelisse."""
-    ts = data["timestamp"]
-    ts_str = ts.strftime("%Y-%m-%dT%H:%M:%S")
-    date_str = ts_str[:10]
-    sport_et = SPORT_MAP.get(data["sport"], data["sport"])
+    ts_str = to_local_iso(data["timestamp"])
     workout_name = data["track_name"]
-    duration_min = int(data["duration_sec"] / 60) if data.get("duration_sec") else None
 
-    existing = conn.execute(
-        "SELECT id FROM workouts WHERE timestamp=? AND workout_name=?",
-        (ts_str, workout_name),
-    ).fetchone()
+    existing = find_existing_cardio(conn, ts_str)
     if existing:
         return False, existing["id"]
 
-    cur = conn.execute(
-        """INSERT INTO workouts
-           (timestamp, date, workout_name, workout_type,
-            duration_min, distance_m, avg_hr, kcal, z2_min, source)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
-        (
-            ts_str, date_str, workout_name, sport_et,
-            duration_min, data.get("distance_m"), data.get("avg_hr"),
-            data.get("kcal"), data.get("zone_min", {}).get("z2"), "gpx",
-        ),
-    )
+    cur = conn.execute(CARDIO_INSERT_SQL,
+                       cardio_insert_values(ts_str, workout_name, data["sport"], data, "gpx"))
     conn.commit()
     return True, cur.lastrowid
 
@@ -239,7 +214,7 @@ def process_file(gpx_path: Path, conn, archive: bool = True) -> str:
         print(f"  ✗ DB kirjutamine ebaõnnestus ({e}) — liigutatud failed/", file=sys.stderr)
         return "failed"
 
-    sport_et = SPORT_MAP.get(data["sport"], data["sport"])
+    sport = sport_et(data["sport"])
     dist = f"{data['distance_m']/1000:.1f} km" if data.get("distance_m") else "?"
     if data.get("duration_sec"):
         mins = int(data["duration_sec"] // 60)
@@ -248,7 +223,7 @@ def process_file(gpx_path: Path, conn, archive: bool = True) -> str:
         dur = "?"
 
     if added:
-        print(f"  ✓ Lisatud (id={wid}): {sport_et} | {dist} | {dur} | {data.get('avg_hr', '?')} bpm")
+        print(f"  ✓ Lisatud (id={wid}): {sport} | {dist} | {dur} | {data.get('avg_hr', '?')} bpm")
     else:
         print(f"  ↩ Juba olemas (id={wid}), vahele jäetud")
 
@@ -269,7 +244,6 @@ def main():
 
     conn = get_db()
     init_schema(conn)
-    ensure_columns(conn)
 
     files = []
     if args.all_incoming:

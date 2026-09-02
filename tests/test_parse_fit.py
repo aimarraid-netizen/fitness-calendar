@@ -36,7 +36,9 @@ SESSION = [
     ("total_elapsed_time", 1800.0),
     ("total_distance", 3000.0),
     ("avg_heart_rate", 120),
+    ("max_heart_rate", 150),
     ("total_calories", 200),
+    ("total_ascent", 42),
 ]
 
 
@@ -48,7 +50,9 @@ def test_session_fields_mapped(monkeypatch):
     assert data["duration_sec"] == 1800.0
     assert data["distance_m"] == 3000.0
     assert data["avg_hr"] == 120
+    assert data["max_hr_val"] == 150
     assert data["kcal"] == 200
+    assert data["ascent_m"] == 42
 
 
 def test_zone_minutes_sum_to_duration(monkeypatch):
@@ -76,11 +80,36 @@ def test_out_of_bounds_values_nulled(monkeypatch, capsys):
 
 def test_insert_and_dedup(conn, monkeypatch):
     monkeypatch.setattr(parse_fit, "FitFile", make_fake_fitfile(SESSION, [135] * 50))
-    data = parse_fit.parse_fit(Path("fake.fit"))
-    added, wid = parse_fit.insert_workout(conn, Path("fake.fit"), data)
+    data = parse_fit.parse_fit(Path("Monday Evening Walk.fit"))
+    added, wid = parse_fit.insert_workout(conn, Path("Monday Evening Walk.fit"), data)
     assert added and wid
-    again, wid2 = parse_fit.insert_workout(conn, Path("fake.fit"), data)
+    again, wid2 = parse_fit.insert_workout(conn, Path("Monday Evening Walk.fit"), data)
     assert not again and wid2 == wid
-    row = conn.execute("SELECT z2_min, source FROM workouts WHERE id=?", (wid,)).fetchone()
+    # sama fail pärast arhiveerimist (prefiks + _2) EI tekita duplikaati
+    again2, wid3 = parse_fit.insert_workout(
+        conn, Path("20260601_180000_Monday Evening Walk_2.fit"), data)
+    assert not again2 and wid3 == wid
+
+    row = conn.execute("SELECT * FROM workouts WHERE id=?", (wid,)).fetchone()
     assert row["source"] == "fit"
-    assert row["z2_min"] is not None and row["z2_min"] > 0  # 135 bpm on z2-s (62/179)
+    # 18:00 UTC -> 21:00 Europe/Tallinn (suveaeg), ühtne formaat tühikuga
+    assert row["timestamp"] == "2026-06-01 21:00:00"
+    assert row["date"] == "2026-06-01"
+    assert row["workout_name"] == "Monday Evening Walk"
+    assert row["workout_type"] == "kõndimine"
+    # kõik tsoonid salvestatud (135 bpm = z2 60/180 juures: 132..144)
+    assert row["z2_min"] is not None and row["z2_min"] > 0
+    assert all(row[z] is not None for z in ("z1_min", "z3_min", "z4_min", "z5_min"))
+    assert abs(sum(row[z] for z in ("z1_min", "z2_min", "z3_min", "z4_min", "z5_min")) - 30) < 0.5
+    assert row["max_hr"] == 150
+    assert row["ascent_m"] == 42
+
+
+def test_utc_evening_rolls_to_local_next_day(conn, monkeypatch):
+    late = [("start_time", datetime(2026, 6, 1, 22, 30))] + SESSION[1:]
+    monkeypatch.setattr(parse_fit, "FitFile", make_fake_fitfile(late, [135] * 10))
+    data = parse_fit.parse_fit(Path("late.fit"))
+    _, wid = parse_fit.insert_workout(conn, Path("late.fit"), data)
+    row = conn.execute("SELECT timestamp, date FROM workouts WHERE id=?", (wid,)).fetchone()
+    assert row["timestamp"] == "2026-06-02 01:30:00"
+    assert row["date"] == "2026-06-02"   # lokaalne kuupäev, mitte UTC

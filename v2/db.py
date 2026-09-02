@@ -3,10 +3,25 @@
 Põhireegel: weight_kg = NULL tähendab "kaalu pole logitud" (TRX/kehakaal/puuduv).
 EI tohi olla 0.0, mida võrreldakse kui tugevuse langust.
 """
+import os
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 DB_PATH = Path(__file__).parent.parent / "data" / "trenn.db"
+
+# Kõik ajatemplid baasis on LOKAALSED ja ühes formaadis. FIT/GPX annavad UTC
+# (naive), CSV lokaalaja — enne salvestust käivad kõik läbi to_local_iso().
+TZ = ZoneInfo(os.getenv("TRENN_TZ", "Europe/Tallinn"))
+TS_FMT = "%Y-%m-%d %H:%M:%S"
+
+# Kardio-veerud, mis lisandusid pärast algskeemi (ensure_columns migreerib vanad baasid)
+CARDIO_COLS = {
+    "z1_min": "REAL", "z2_min": "REAL", "z3_min": "REAL", "z4_min": "REAL", "z5_min": "REAL",
+    "ascent_m": "REAL",
+    "max_hr": "INTEGER",
+}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS workouts (
@@ -19,9 +34,12 @@ CREATE TABLE IF NOT EXISTS workouts (
     distance_m REAL,
     total_volume REAL,
     avg_hr INTEGER,
+    max_hr INTEGER,
     kcal INTEGER,
     notes TEXT,
     source TEXT,
+    z1_min REAL, z2_min REAL, z3_min REAL, z4_min REAL, z5_min REAL,  -- Karvoneni tsoonid (min)
+    ascent_m REAL,
     UNIQUE(timestamp, workout_name)
 );
 
@@ -67,25 +85,42 @@ def get_db(db_path=None) -> "sqlite3.Connection":
 
 
 def init_schema(conn) -> None:
-    """Loo tabelid kui puuduvad."""
+    """Loo tabelid kui puuduvad + migreeri vana baasi puuduvad veerud."""
     conn.executescript(SCHEMA)
     conn.commit()
+    ensure_columns(conn)
 
 
 def ensure_columns(conn) -> None:
     """Lisa hiljem lisandunud workouts-veerud kui puuduvad (vana DB migratsioon)."""
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(workouts)")]
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(workouts)")}
+    wanted = {"distance_m": "REAL", **CARDIO_COLS}
     added = []
-    if "distance_m" not in cols:
-        conn.execute("ALTER TABLE workouts ADD COLUMN distance_m REAL")
-        added.append("distance_m")
-    if "z2_min" not in cols:
-        conn.execute("ALTER TABLE workouts ADD COLUMN z2_min REAL")
-        added.append("z2_min")
+    for name, typ in wanted.items():
+        if name not in cols:
+            conn.execute(f"ALTER TABLE workouts ADD COLUMN {name} {typ}")
+            added.append(name)
     if added:
         conn.commit()
         for c in added:
             print(f"  ✓ Lisatud veerg: workouts.{c}")
+
+
+def to_local_iso(dt: datetime) -> str:
+    """Ajatempel baasi jaoks: lokaalne aeg (TRENN_TZ), formaat 'YYYY-MM-DD HH:MM:SS'.
+
+    Naive datetime loetakse UTC-ks — fitparse ja GPX <time>…Z annavad UTC ilma
+    tzinfo-ta. Aware datetime teisendatakse. CSV-parser annab juba lokaalaja
+    ja kutsub seda ainult formaadi ühtlustamiseks (vt local_naive_iso).
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(TZ).strftime(TS_FMT)
+
+
+def local_naive_iso(dt: datetime) -> str:
+    """Juba lokaalajas oleva naive datetime'i formaat (CSV-parser)."""
+    return dt.strftime(TS_FMT)
 
 
 if __name__ == "__main__":
