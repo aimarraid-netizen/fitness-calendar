@@ -93,5 +93,5 @@ Repo `~/projects/trenn` (public GitHub `aimarraid-netizen/trenn-d8b4c9a1`, Pages
 - Isiklikud pulsinäitajad on `.env`-is (EI reposse); kood/`.env.example` kasutavad neutraalseid vaikeväärtusi.
 
 **Why:** Ainus tõeallikas on SQLite; HTML on avalik toode, andmed ei tohi giti minna.
-**How to apply:** Uue trenni-sessiooni alguses loe plaanifail; alusta Faasist 2 või 3A vastavalt Aimari soovile. Enne DB-muudatusi `cp data/trenn.db data/trenn.db.bak-$(date +%F)`. Seotud: [[project_training_strategy]], [[feedback_generated_files_timestamp]], [[aquarium-pages-pipeline]].
+**How to apply:** Uue trenni-sessiooni alguses loe plaanifail; alusta Faasist 2 või 3A vastavalt Aimari soovile. Enne DB-muudatusi `cp data/trenn.db data/trenn.db.bak-$(date +%F)`. Seotud: `~/.claude-memory/project_training_strategy.md`, `~/claude-config/docs/tooviisid.md`, `~/.claude-memory/aquarium-pages-pipeline.md`.
 
